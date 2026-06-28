@@ -32,3 +32,9 @@ This project was built using AI tools and frontend technologies to demonstrate a
 - Netlify (Deployment)
 
 ---
+
+## 📷 Screenshots
+
+![image alt](https://github.com/dskajay7799/Saarthirep/blob/main/Screenshot%202026-06-28%20230909.png?raw=true)
+![image alt](https://github.com/dskajay7799/Saarthirep/blob/main/Screenshot%202026-06-28%20231002.png?raw=true)
+![image alt](https://github.com/dskajay7799/Saarthirep/blob/main/Screenshot%202026-06-28%20231027.png?raw=true)
