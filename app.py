@@ -28,12 +28,13 @@ GEMINI_MODEL = os.environ.get('GEMINI_MODEL', 'gemini-1.5-flash')
 GEMINI_URL = f'https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent'
 
 # Session configuration – cross-origin ready (Netlify frontend -> Render backend)
-if os.environ.get('FLASK_ENV') == 'production':
-    app.config['SESSION_COOKIE_SAMESITE'] = 'None'
-    app.config['SESSION_COOKIE_SECURE'] = True
-else:
-    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-    app.config['SESSION_COOKIE_SECURE'] = False
+# Render automatically sets RENDER=True on all its services, so we use that
+# to detect production instead of relying on FLASK_ENV (which Render does NOT set).
+IS_PROD = bool(os.environ.get('RENDER')) or os.environ.get('FLASK_ENV') == 'production'
+# Cross-origin cookies (Netlify → Render) REQUIRE SameSite=None + Secure.
+# Without this, the browser silently drops the session cookie after login.
+app.config['SESSION_COOKIE_SAMESITE'] = 'None' if IS_PROD else 'Lax'
+app.config['SESSION_COOKIE_SECURE'] = True if IS_PROD else False
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
 
@@ -59,6 +60,8 @@ CORS(
     supports_credentials=True,
     origins=allowed_origins,
     allow_headers=['Content-Type', 'Authorization'],
+    expose_headers=['Content-Type'],
+    vary_header=True,
 )
 
 db = SQLAlchemy(app)
