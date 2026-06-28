@@ -1802,7 +1802,7 @@
         // On Render + Netlify: set this to your Render backend URL, e.g.
         // 'https://your-app.onrender.com'. Leave as '' if frontend and
         // backend are served from the same origin.
-        const API_BASE = 'https://saarthirep.onrender.com';
+      const API_BASE = "https://saarthirep.onrender.com";
 
         async function apiFetch(path, options = {}) {
             const res = await fetch(API_BASE + path, {
@@ -2400,7 +2400,8 @@
             // Check browser support
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             if (!SpeechRecognition) {
-                alert('Voice input is not supported in this browser. Please use Google Chrome or Microsoft Edge.');
+                addChatMessage('bot', '⚠️ <strong>Voice input is not supported in your browser.</strong><br>Please use <strong>Google Chrome</strong> or <strong>Microsoft Edge</strong> on desktop, or Chrome on Android. Safari and Firefox do not support voice input.');
+                showSection('assistant');
                 return;
             }
 
@@ -2440,15 +2441,18 @@
                     console.warn('Voice recognition error:', event.error);
                     let msg = '';
                     if (event.error === 'not-allowed') {
-                        msg = 'Microphone access denied. Please allow microphone in browser settings.';
+                        msg = '🎤 Microphone access denied. Click the 🔒 lock icon in your browser\'s address bar and allow microphone access, then try again.';
                     } else if (event.error === 'no-speech') {
-                        msg = 'No speech detected. Please try again.';
+                        msg = '🔇 No speech was detected. Please try again and speak clearly after clicking the mic button.';
                     } else if (event.error === 'audio-capture') {
-                        msg = 'No microphone found. Please connect a microphone.';
+                        msg = '🎙️ No microphone found. Please connect a microphone and try again.';
+                    } else if (event.error === 'network') {
+                        msg = '🌐 Voice recognition needs an internet connection to Google\'s servers. Please check your connection and try again, or type your question instead.';
                     } else {
-                        msg = 'Voice error: ' + event.error + '. Please try typing instead.';
+                        msg = '⚠️ Voice error: ' + event.error + '. Please try typing your question instead.';
                     }
-                    document.getElementById('chatInput').placeholder = '⚠️ ' + msg;
+                    addChatMessage('bot', msg);
+                    showSection('assistant');
                     stopVoiceInput();
                 };
 
@@ -2463,9 +2467,11 @@
                 recognition.start();
             } catch (e) {
                 console.error('Voice start error:', e);
-                alert('Could not start voice recognition. Please check your microphone and try again.');
+                addChatMessage('bot', '⚠️ Could not start voice recognition. Please check your microphone permissions and try again, or type your question.');
+                showSection('assistant');
             }
         }
+
 
         function stopVoiceInput() {
             if (recognition) {
@@ -2694,6 +2700,11 @@
 
         window.onload = function() {
             applyDarkModeFromStorage();
+            // Wake up the Render backend immediately — free tier spins down after
+            // 15 min of inactivity and the first request can take 30-60 s.
+            // Firing this now means the service is warm by the time the user
+            // clicks Log In or Sign Up.
+            fetch(API_BASE + '/api/health').catch(() => {});
             tryRestoreSession();
         };
 
