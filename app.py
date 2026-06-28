@@ -23,7 +23,7 @@ if not app.config['SECRET_KEY']:
 # Falling back to the key you were using, so nothing breaks if you haven't
 # moved it to an env var yet. For real production use, set the env var and
 # remove the hardcoded fallback below.
-GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', 'AIzaSyDD5DB0OH4tTVgfC9Gv6UYI-d6dO26W5hQ')
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', 'AQ.Ab8RN6LXp-XpcImgWGP_T7Rnx_H-by02VNE1xLHOrC-9JEwexw')
 GEMINI_MODEL = os.environ.get('GEMINI_MODEL', 'gemini-1.5-flash')
 GEMINI_URL = f'https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent'
 
