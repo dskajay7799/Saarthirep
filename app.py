@@ -1,488 +1,2724 @@
-import os
-import re
-import json
-from datetime import datetime, timedelta
-from functools import wraps
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Saarthi AI – Government Services Assistant</title>
 
-import requests
-from flask import Flask, request, jsonify, session, send_from_directory
-from flask_sqlalchemy import SQLAlchemy
-from flask_cors import CORS
-from werkzeug.security import generate_password_hash, check_password_hash
+    <!-- ─── Libraries ─── -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js">
+    </script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js">
+    </script>
 
-# ─── APP CONFIG ──────────────────────────────────────────────
-app = Flask(__name__)
-BASE_DIR = os.path.dirname(__file__)
-
-# Security: SECRET_KEY must be set in environment (Render -> Environment tab)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY')
-if not app.config['SECRET_KEY']:
-    raise RuntimeError("SECRET_KEY environment variable not set. Please set it in Render dashboard.")
-
-# Gemini API key — set this in Render's Environment tab as GEMINI_API_KEY.
-# Falling back to the key you were using, so nothing breaks if you haven't
-# moved it to an env var yet. For real production use, set the env var and
-# remove the hardcoded fallback below.
-GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', 'AQ.Ab8RN6LXp-XpcImgWGP_T7Rnx_H-by02VNE1xLHOrC-9JEwexw')
-GEMINI_MODEL = os.environ.get('GEMINI_MODEL', 'gemini-1.5-flash')
-GEMINI_URL = f'https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent'
-
-# Session configuration – cross-origin ready (Netlify frontend -> Render backend)
-if os.environ.get('FLASK_ENV') == 'production':
-    app.config['SESSION_COOKIE_SAMESITE'] = 'None'
-    app.config['SESSION_COOKIE_SECURE'] = True
-else:
-    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-    app.config['SESSION_COOKIE_SECURE'] = False
-app.config['SESSION_COOKIE_HTTPONLY'] = True
-app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
-
-# Database – use DATABASE_URL (PostgreSQL recommended) or fallback to SQLite
-database_url = os.environ.get('DATABASE_URL')
-if not database_url:
-    database_url = 'sqlite:///saarthi.db'
-    print("No DATABASE_URL set. Using local SQLite. For Render, set DATABASE_URL to your PostgreSQL URL.")
-if database_url.startswith('postgres://'):
-    database_url = database_url.replace('postgres://', 'postgresql://', 1)
-app.config['SQLALCHEMY_DATABASE_URI'] = database_url
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
-# CORS – allow only your frontend origin(s). Set ALLOWED_ORIGINS on Render to
-# your Netlify URL, e.g. https://your-site.netlify.app
-allowed_origins = [
-    "https://gleaming-horse-a63d32.netlify.app",
-    "http://localhost:3000",
-    "http://127.0.0.1:5500"
-]
-CORS(
-    app,
-    supports_credentials=True,
-    origins=allowed_origins,
-    allow_headers=['Content-Type', 'Authorization'],
-)
-
-db = SQLAlchemy(app)
-
-
-# ─── DATABASE MODELS ──────────────────────────────────────────
-class User(db.Model):
-    __tablename__ = 'users'
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(100), unique=True, nullable=False, index=True)
-    email = db.Column(db.String(120), unique=True, nullable=False, index=True)
-    password_hash = db.Column(db.String(256), nullable=False)
-    full_name = db.Column(db.String(120), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-    profile = db.relationship('Profile', backref='user', uselist=False, cascade='all, delete-orphan')
-    applications = db.relationship('Application', backref='user', lazy=True, cascade='all, delete-orphan')
-
-    def set_password(self, password):
-        self.password_hash = generate_password_hash(password, method='pbkdf2:sha256')
-
-    def check_password(self, password):
-        return check_password_hash(self.password_hash, password)
-
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'username': self.username,
-            'email': self.email,
-            'full_name': self.full_name,
-            'created_at': self.created_at.isoformat()
+    <style>
+        /* ═══════════════════════════════════
+           RESET & BASE
+           ═══════════════════════════════════ */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: 'Segoe UI', Roboto, system-ui, sans-serif;
+            background: #f5f7fb;
+            color: #1e293b;
+            transition: background 0.3s, color 0.3s;
+        }
+        .dark-mode {
+            background: #0f1724;
+            color: #e2e8f0;
+        }
+        .dark-mode .section,
+        .dark-mode .sidebar,
+        .dark-mode .card,
+        .dark-mode .chat-message.bot,
+        .dark-mode .chat-message.user,
+        .dark-mode .step-card,
+        .dark-mode .scheme-card,
+        .dark-mode .profile-box,
+        .dark-mode .login-box,
+        .dark-mode .topnav,
+        .dark-mode .header,
+        .dark-mode .chart-box,
+        .dark-mode .chat-container,
+        .dark-mode .chat-messages,
+        .dark-mode .chat-input-row,
+        .dark-mode .chat-suggestions,
+        .dark-mode .map-container,
+        .dark-mode .office-card,
+        .dark-mode .rec-box {
+            background: #1a2332 !important;
+            color: #e2e8f0 !important;
+            border-color: #2d3a4f !important;
+        }
+        .dark-mode .topnav button,
+        .dark-mode .sidebar button,
+        .dark-mode .btn,
+        .dark-mode .chat-suggestions button {
+            background: #263040 !important;
+            color: #e2e8f0 !important;
+        }
+        .dark-mode .topnav button:hover,
+        .dark-mode .sidebar button:hover,
+        .dark-mode .chat-suggestions button:hover {
+            background: #33415a !important;
+        }
+        .dark-mode input,
+        .dark-mode textarea,
+        .dark-mode select {
+            background: #263040 !important;
+            color: #e2e8f0 !important;
+            border-color: #3d4d66 !important;
+        }
+        .dark-mode table th {
+            background: #1f2a3a !important;
+        }
+        .dark-mode table td {
+            border-color: #2d3a4f !important;
+        }
+        .dark-mode .badge-green {
+            background: #0f2a1f !important;
+            color: #5cb85c !important;
+        }
+        .dark-mode .badge-orange {
+            background: #2a1f0f !important;
+            color: #e8a050 !important;
+        }
+        .dark-mode .badge-red {
+            background: #2a0f0f !important;
+            color: #e06060 !important;
+        }
+        .dark-mode .badge-blue {
+            background: #0f1f2a !important;
+            color: #60a0e0 !important;
         }
 
-
-class Profile(db.Model):
-    __tablename__ = 'profiles'
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, unique=True)
-    age = db.Column(db.Integer, default=30)
-    occupation = db.Column(db.String(50), default='other')
-    income = db.Column(db.String(20), default='1l_3l')
-    state = db.Column(db.String(50), default='other')
-    gender = db.Column(db.String(20), default='male')
-    preferred_lang = db.Column(db.String(5), default='en')
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    def to_dict(self):
-        return {
-            'age': self.age,
-            'occupation': self.occupation,
-            'income': self.income,
-            'state': self.state,
-            'gender': self.gender,
-            'preferred_lang': self.preferred_lang
+        ::-webkit-scrollbar {
+            width: 5px;
+            height: 5px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #e9edf4;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1a5fb4;
+            border-radius: 4px;
+        }
+        .dark-mode ::-webkit-scrollbar-track {
+            background: #1a2332;
         }
 
-
-class Application(db.Model):
-    __tablename__ = 'applications'
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    app_code = db.Column(db.String(20), nullable=False)
-    scheme_id = db.Column(db.String(50), nullable=False)
-    scheme_title = db.Column(db.String(200), nullable=False)
-    category = db.Column(db.String(50))
-    status = db.Column(db.String(30), default='Pending Review')
-    submitted_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-    def to_dict(self):
-        return {
-            'id': self.app_code,
-            'schemeId': self.scheme_id,
-            'title': self.scheme_title,
-            'category': self.category,
-            'submitted': self.submitted_at.strftime('%d/%m/%Y'),
-            'status': self.status
+        /* ─── Login ─── */
+        .login-page {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(145deg, #0b2b5c, #1a5fb4);
+            padding: 16px;
+        }
+        .login-box {
+            background: #ffffff;
+            padding: 40px 36px;
+            border-radius: 24px;
+            width: 420px;
+            max-width: 100%;
+            box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
+            text-align: center;
+        }
+        .login-box .brand-icon {
+            font-size: 52px;
+            color: #1a5fb4;
+            margin-bottom: 4px;
+        }
+        .login-box h2 {
+            color: #0b2b5c;
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+        .login-box .sub {
+            color: #64748b;
+            font-size: 15px;
+            margin-bottom: 24px;
+        }
+        .login-box input {
+            width: 100%;
+            padding: 12px 16px;
+            margin: 8px 0;
+            border: 2px solid #dde3ed;
+            border-radius: 12px;
+            font-size: 15px;
+            transition: border 0.2s;
+        }
+        .login-box input:focus {
+            border-color: #1a5fb4;
+            outline: none;
+        }
+        .login-box .btn-primary {
+            width: 100%;
+            padding: 14px;
+            background: #1a5fb4;
+            color: #fff;
+            border: none;
+            border-radius: 12px;
+            font-size: 17px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 10px;
+            transition: background 0.2s, transform 0.1s;
+        }
+        .login-box .btn-primary:hover {
+            background: #0b2b5c;
+            transform: scale(1.01);
+        }
+        .login-box .hint {
+            font-size: 13px;
+            color: #94a3b8;
+            margin-top: 14px;
+            min-height: 16px;
+        }
+        .hidden {
+            display: none !important;
+        }
+        .auth-tabs {
+            display: flex;
+            background: #f1f4f9;
+            border-radius: 12px;
+            padding: 4px;
+            margin-bottom: 18px;
+        }
+        .auth-tab {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            background: transparent;
+            border-radius: 9px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #64748b;
+            cursor: pointer;
+            transition: background 0.2s, color 0.2s;
+        }
+        .auth-tab.active {
+            background: #1a5fb4;
+            color: #fff;
+        }
+        .auth-error {
+            background: #fdecea;
+            color: #b3261e;
+            border: 1px solid #f5c6c4;
+            padding: 10px 14px;
+            border-radius: 10px;
+            font-size: 13px;
+            margin-top: 14px;
+            text-align: left;
+        }
+        .login-box .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .dark-mode .auth-tabs {
+            background: #1a2332 !important;
+        }
+        .dark-mode .auth-tab {
+            color: #94a3b8;
+        }
+        .dark-mode .auth-tab.active {
+            background: #1a5fb4 !important;
+            color: #fff !important;
         }
 
-
-class ChatLog(db.Model):
-    """Optional history of chat exchanges, useful for support/debugging."""
-    __tablename__ = 'chat_logs'
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    message = db.Column(db.Text, nullable=False)
-    reply = db.Column(db.Text)
-    lang = db.Column(db.String(5), default='en')
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-
-# ─── HELPERS ──────────────────────────────────────────────────
-def get_current_user():
-    user_id = session.get('user_id')
-    if user_id:
-        return User.query.get(user_id)
-    return None
-
-
-def login_required(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        if not session.get('user_id'):
-            return jsonify({'error': 'Authentication required'}), 401
-        return f(*args, **kwargs)
-    return decorated
-
-
-def validate_email(email):
-    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-    return re.match(pattern, email) is not None
-
-
-def validate_password(password):
-    if len(password) < 6:
-        return False, 'Password must be at least 6 characters'
-    return True, 'Valid'
-
-
-def get_or_create_profile(user):
-    profile = Profile.query.filter_by(user_id=user.id).first()
-    if not profile:
-        profile = Profile(user_id=user.id)
-        db.session.add(profile)
-        db.session.commit()
-    return profile
-
-
-# ─── AUTH ROUTES ──────────────────────────────────────────────
-@app.route('/api/auth/signup', methods=['POST'])
-def signup():
-    try:
-        data = request.get_json(force=True) or {}
-        username = (data.get('username') or '').strip()
-        email = (data.get('email') or '').strip().lower()
-        password = data.get('password') or ''
-        full_name = (data.get('full_name') or username).strip()
-
-        if not username or not email or not password:
-            return jsonify({'error': 'Username, email and password are required'}), 400
-        if len(username) < 3:
-            return jsonify({'error': 'Username must be at least 3 characters'}), 400
-        if not validate_email(email):
-            return jsonify({'error': 'Invalid email address'}), 400
-        valid, msg = validate_password(password)
-        if not valid:
-            return jsonify({'error': msg}), 400
-
-        if User.query.filter_by(username=username).first():
-            return jsonify({'error': 'Username already taken'}), 409
-        if User.query.filter_by(email=email).first():
-            return jsonify({'error': 'Email already registered'}), 409
-
-        user = User(username=username, email=email, full_name=full_name)
-        user.set_password(password)
-        db.session.add(user)
-        db.session.commit()
-
-        # Create a default profile row for this user
-        db.session.add(Profile(user_id=user.id))
-        db.session.commit()
-
-        session.permanent = True
-        session['user_id'] = user.id
-
-        return jsonify({'message': 'Account created successfully', 'user': user.to_dict()}), 201
-    except Exception as e:
-        db.session.rollback()
-        print(f'Signup error: {str(e)}')
-        return jsonify({'error': 'Signup failed. Please try again.'}), 500
-
-
-@app.route('/api/auth/login', methods=['POST'])
-def login():
-    try:
-        data = request.get_json(force=True) or {}
-        identifier = (data.get('username') or data.get('email') or '').strip()
-        password = data.get('password') or ''
-
-        if not identifier or not password:
-            return jsonify({'error': 'Username/email and password are required'}), 400
-
-        user = User.query.filter(
-            (User.username == identifier) | (User.email == identifier.lower())
-        ).first()
-
-        if not user or not user.check_password(password):
-            return jsonify({'error': 'Invalid username or password'}), 401
-
-        session.permanent = True
-        session['user_id'] = user.id
-
-        profile = get_or_create_profile(user)
-
-        return jsonify({
-            'message': 'Login successful',
-            'user': user.to_dict(),
-            'profile': profile.to_dict()
-        }), 200
-    except Exception as e:
-        print(f'Login error: {str(e)}')
-        return jsonify({'error': 'Login failed. Please try again.'}), 500
-
-
-@app.route('/api/auth/logout', methods=['POST'])
-def logout():
-    session.clear()
-    return jsonify({'message': 'Logged out successfully'}), 200
-
-
-@app.route('/api/auth/me', methods=['GET'])
-@login_required
-def me():
-    user = get_current_user()
-    if not user:
-        session.clear()
-        return jsonify({'error': 'User not found'}), 404
-    profile = get_or_create_profile(user)
-    return jsonify({'user': user.to_dict(), 'profile': profile.to_dict()}), 200
-
-
-# ─── PROFILE ROUTES ────────────────────────────────────────────
-@app.route('/api/profile', methods=['GET'])
-@login_required
-def get_profile():
-    user = get_current_user()
-    profile = get_or_create_profile(user)
-    return jsonify({'profile': profile.to_dict(), 'full_name': user.full_name}), 200
-
-
-@app.route('/api/profile', methods=['PUT'])
-@login_required
-def update_profile():
-    try:
-        user = get_current_user()
-        profile = get_or_create_profile(user)
-        data = request.get_json(force=True) or {}
-
-        if 'full_name' in data and data['full_name']:
-            user.full_name = data['full_name'].strip()
-        if 'age' in data:
-            try:
-                age = int(data['age'])
-                if 0 <= age <= 120:
-                    profile.age = age
-            except (TypeError, ValueError):
-                pass
-        if 'occupation' in data:
-            profile.occupation = data['occupation']
-        if 'income' in data:
-            profile.income = data['income']
-        if 'state' in data:
-            profile.state = data['state']
-        if 'gender' in data:
-            profile.gender = data['gender']
-        if 'preferred_lang' in data:
-            profile.preferred_lang = data['preferred_lang']
-
-        db.session.commit()
-        return jsonify({
-            'message': 'Profile updated successfully',
-            'profile': profile.to_dict(),
-            'full_name': user.full_name
-        }), 200
-    except Exception as e:
-        db.session.rollback()
-        print(f'Profile update error: {str(e)}')
-        return jsonify({'error': 'Failed to update profile'}), 500
-
-
-# ─── APPLICATION (SCHEME TRACKING) ROUTES ─────────────────────
-@app.route('/api/applications', methods=['GET'])
-@login_required
-def get_applications():
-    user = get_current_user()
-    apps = Application.query.filter_by(user_id=user.id).order_by(Application.submitted_at.desc()).all()
-    return jsonify({'applications': [a.to_dict() for a in apps]}), 200
-
-
-@app.route('/api/applications', methods=['POST'])
-@login_required
-def create_application():
-    try:
-        user = get_current_user()
-        data = request.get_json(force=True) or {}
-        scheme_id = data.get('scheme_id')
-        scheme_title = data.get('scheme_title')
-        category = data.get('category', '')
-
-        if not scheme_id or not scheme_title:
-            return jsonify({'error': 'scheme_id and scheme_title are required'}), 400
-
-        existing = Application.query.filter_by(user_id=user.id, scheme_id=scheme_id).first()
-        if existing:
-            return jsonify({'error': 'You already have an application for this scheme', 'application': existing.to_dict()}), 409
-
-        count = Application.query.filter_by(user_id=user.id).count()
-        app_code = 'APP' + str(count + 1).zfill(3)
-
-        application = Application(
-            user_id=user.id,
-            app_code=app_code,
-            scheme_id=scheme_id,
-            scheme_title=scheme_title,
-            category=category
-        )
-        db.session.add(application)
-        db.session.commit()
-
-        return jsonify({'message': 'Application created', 'application': application.to_dict()}), 201
-    except Exception as e:
-        db.session.rollback()
-        print(f'Create application error: {str(e)}')
-        return jsonify({'error': 'Failed to create application'}), 500
-
-
-# ─── GEMINI AI CHAT PROXY ──────────────────────────────────────
-# The Gemini API key never reaches the browser — the frontend calls this
-# endpoint, and this endpoint calls Google using the server-side key.
-@app.route('/api/chat', methods=['POST'])
-@login_required
-def chat():
-    try:
-        data = request.get_json(force=True) or {}
-        message = (data.get('message') or '').strip()
-        lang = data.get('lang', 'en')
-
-        if not message:
-            return jsonify({'error': 'Message is required'}), 400
-        if len(message) > 2000:
-            return jsonify({'error': 'Message too long (max 2000 characters)'}), 400
-
-        user = get_current_user()
-        reply_text = None
-        used_ai = False
-
-        if GEMINI_API_KEY:
-            try:
-                prompt = (
-                    "You are Saarthi AI, a helpful government services assistant for India. "
-                    "Answer the user's question about Indian government schemes, documents, "
-                    "procedures, and eligibility. Provide clear, step-by-step guidance. "
-                    "Keep responses concise and helpful. "
-                    f"User's language preference: {lang}. "
-                    f"User question: {message}"
-                )
-                payload = {"contents": [{"parts": [{"text": prompt}]}]}
-                resp = requests.post(
-                    GEMINI_URL,
-                    params={'key': GEMINI_API_KEY},
-                    json=payload,
-                    timeout=20
-                )
-                if resp.ok:
-                    result = resp.json()
-                    candidates = result.get('candidates', [])
-                    if candidates and candidates[0].get('content', {}).get('parts'):
-                        reply_text = candidates[0]['content']['parts'][0].get('text')
-                        used_ai = True
-            except requests.RequestException as e:
-                print(f'Gemini request failed: {str(e)}')
-
-        if not reply_text:
-            reply_text = None  # Frontend will use its own rule-based fallback if this is None
-
-        # Log the exchange (best-effort, don't fail the request if this fails)
-        try:
-            log = ChatLog(user_id=user.id, message=message, reply=reply_text, lang=lang)
-            db.session.add(log)
-            db.session.commit()
-        except Exception:
-            db.session.rollback()
-
-        return jsonify({'reply': reply_text, 'used_ai': used_ai}), 200
-    except Exception as e:
-        print(f'Chat error: {str(e)}')
-        return jsonify({'error': 'Chat request failed'}), 500
-
-
-# ─── HEALTH / STATIC ────────────────────────────────────────────
-@app.route('/', methods=['GET'])
-def health_check():
-    if 'text/html' in request.headers.get('Accept', '').lower():
-        return send_from_directory(BASE_DIR, 'index.html')
-    return jsonify({
-        'status': 'success',
-        'message': 'Saarthi AI API is running',
-        'version': '1.0.0',
-        'endpoints': {
-            'auth': ['POST /api/auth/signup', 'POST /api/auth/login', 'POST /api/auth/logout', 'GET /api/auth/me'],
-            'profile': ['GET /api/profile', 'PUT /api/profile'],
-            'applications': ['GET /api/applications', 'POST /api/applications'],
-            'chat': ['POST /api/chat']
+        /* ─── Header ─── */
+        .header {
+            background: #1a5fb4;
+            color: #fff;
+            padding: 10px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.10);
         }
-    }), 200
+        .header .logo {
+            font-size: 20px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .header .logo i {
+            font-size: 26px;
+        }
+        .header .logo small {
+            font-size: 13px;
+            font-weight: 400;
+            opacity: 0.8;
+            margin-left: 6px;
+        }
+        .header .user-badge {
+            background: rgba(255, 255, 255, 0.15);
+            padding: 4px 16px;
+            border-radius: 30px;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: default;
+        }
+        .header .user-badge .avatar {
+            background: #fff;
+            color: #1a5fb4;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 14px;
+        }
+        .header .user-badge .match-badge {
+            font-size: 12px;
+            background: rgba(255, 255, 255, 0.20);
+            padding: 2px 10px;
+            border-radius: 30px;
+        }
+
+        /* ─── Top Nav ─── */
+        .topnav {
+            background: #144b8a;
+            padding: 5px 16px;
+            display: flex;
+            gap: 3px;
+            flex-wrap: wrap;
+            align-items: center;
+            border-bottom: 2px solid #0b2b5c;
+        }
+        .topnav button {
+            padding: 7px 16px;
+            border: none;
+            background: transparent;
+            color: #fff;
+            cursor: pointer;
+            border-radius: 30px;
+            font-size: 13px;
+            font-weight: 500;
+            transition: background 0.2s, color 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .topnav button i {
+            font-size: 14px;
+        }
+        .topnav button:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+        .topnav button.active-nav {
+            background: #fff;
+            color: #144b8a;
+        }
+        .topnav .spacer {
+            flex: 1;
+        }
+        .topnav .dark-toggle {
+            background: rgba(255, 255, 255, 0.10);
+            border-radius: 30px;
+            padding: 5px 14px;
+            font-size: 13px;
+        }
+
+        /* ─── Container ─── */
+        .container {
+            display: flex;
+            min-height: calc(100vh - 110px);
+        }
+
+        /* ─── Sidebar ─── */
+        .sidebar {
+            width: 220px;
+            background: #e9edf4;
+            padding: 10px 8px;
+            overflow-y: auto;
+            flex-shrink: 0;
+            transition: background 0.3s;
+            border-right: 1px solid #d0d8e4;
+        }
+        .sidebar .cat-title {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: #8895aa;
+            padding: 10px 8px 4px;
+            font-weight: 600;
+        }
+        .sidebar button {
+            width: 100%;
+            padding: 8px 12px;
+            margin-bottom: 2px;
+            border: none;
+            cursor: pointer;
+            text-align: left;
+            border-radius: 8px;
+            background: transparent;
+            font-size: 13px;
+            color: #1e293b;
+            transition: background 0.15s, color 0.15s;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .sidebar button i {
+            font-size: 16px;
+            width: 22px;
+            text-align: center;
+        }
+        .sidebar button:hover {
+            background: #d0d8e4;
+        }
+        .sidebar button.active-side {
+            background: #1a5fb4;
+            color: #fff;
+        }
+        .dark-mode .sidebar button.active-side {
+            background: #1a5fb4 !important;
+            color: #fff !important;
+        }
+
+        /* ─── Content ─── */
+        .content {
+            flex: 1;
+            padding: 20px 24px;
+            overflow-y: auto;
+            max-height: calc(100vh - 110px);
+        }
+        .section {
+            display: none;
+            animation: fadeUp 0.3s ease;
+        }
+        .section.active {
+            display: block;
+        }
+        @keyframes fadeUp {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .section-title {
+            font-size: 22px;
+            font-weight: 700;
+            margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .section-title i {
+            color: #1a5fb4;
+        }
+        .section-sub {
+            color: #8895aa;
+            font-size: 14px;
+            margin-bottom: 18px;
+        }
+
+        /* ─── Cards ─── */
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .card {
+            background: #fff;
+            padding: 16px 18px;
+            border-radius: 14px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            transition: transform 0.2s, box-shadow 0.2s;
+            border: 1px solid rgba(0, 0, 0, 0.04);
+        }
+        .card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.07);
+        }
+        .card .num {
+            font-size: 30px;
+            font-weight: 700;
+            color: #1a5fb4;
+        }
+        .card .label {
+            font-size: 13px;
+            color: #64748b;
+            margin-top: 2px;
+        }
+        .card .icon-big {
+            font-size: 26px;
+            color: #1a5fb4;
+            margin-bottom: 2px;
+            opacity: 0.7;
+        }
+        .dark-mode .card .num {
+            color: #5b9bd5;
+        }
+
+        /* ─── Charts ─── */
+        .chart-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 16px;
+        }
+        .chart-box {
+            background: #fff;
+            padding: 14px 18px;
+            border-radius: 14px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            border: 1px solid rgba(0, 0, 0, 0.04);
+        }
+        .chart-box h4 {
+            margin: 0 0 10px 0;
+            font-size: 15px;
+            color: #334155;
+        }
+        .chart-box canvas {
+            max-height: 190px;
+            max-width: 100%;
+        }
+        @media (max-width:700px) {
+            .chart-row {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* ─── Tables ─── */
+        .table-wrap {
+            overflow-x: auto;
+            margin-top: 12px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+            background: #fff;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        th {
+            background: #1a5fb4;
+            color: #fff;
+            padding: 10px 12px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+        td {
+            padding: 9px 12px;
+            border-bottom: 1px solid #e9edf4;
+        }
+        tr:hover td {
+            background: #f5f8fc;
+        }
+        .badge {
+            display: inline-block;
+            padding: 2px 12px;
+            border-radius: 30px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .badge-green {
+            background: #e2f3e2;
+            color: #1e7a34;
+        }
+        .badge-orange {
+            background: #fef0e0;
+            color: #b85a00;
+        }
+        .badge-red {
+            background: #fde8e8;
+            color: #a51c1c;
+        }
+        .badge-blue {
+            background: #e3efff;
+            color: #0a4a8a;
+        }
+
+        /* ─── Chat ─── */
+        .chat-container {
+            display: flex;
+            flex-direction: column;
+            height: 500px;
+            background: #fff;
+            border-radius: 16px;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+            overflow: hidden;
+            border: 1px solid rgba(0, 0, 0, 0.06);
+        }
+        .chat-header {
+            padding: 10px 20px;
+            background: #1a5fb4;
+            color: #fff;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-shrink: 0;
+        }
+        .chat-header .ai-badge {
+            background: rgba(255, 255, 255, 0.18);
+            padding: 2px 12px;
+            border-radius: 30px;
+            font-size: 11px;
+        }
+        .chat-header .voice-indicator {
+            margin-left: auto;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            font-size: 13px;
+            opacity: 0.8;
+        }
+        .chat-messages {
+            flex: 1;
+            padding: 14px 18px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            background: #fafcff;
+        }
+        .chat-message {
+            max-width: 82%;
+            padding: 10px 16px;
+            border-radius: 14px;
+            line-height: 1.5;
+            font-size: 14px;
+            animation: msgIn 0.25s ease;
+            word-wrap: break-word;
+        }
+        @keyframes msgIn {
+            from {
+                opacity: 0;
+                transform: translateY(8px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .chat-message.bot {
+            background: #e9edf4;
+            color: #1e293b;
+            align-self: flex-start;
+            border-bottom-left-radius: 4px;
+        }
+        .chat-message.user {
+            background: #1a5fb4;
+            color: #fff;
+            align-self: flex-end;
+            border-bottom-right-radius: 4px;
+        }
+        .chat-message .step-list {
+            margin: 6px 0 0 16px;
+            padding-left: 6px;
+        }
+        .chat-message .step-list li {
+            margin: 3px 0;
+        }
+        .chat-message .scheme-link {
+            color: #1a5fb4;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: underline;
+        }
+        .dark-mode .chat-message .scheme-link {
+            color: #6da5e0;
+        }
+        .chat-message .typing-dots {
+            display: inline-flex;
+            gap: 4px;
+        }
+        .chat-message .typing-dots span {
+            animation: dotPulse 1.2s infinite;
+            font-size: 20px;
+            line-height: 1;
+        }
+        .chat-message .typing-dots span:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+        .chat-message .typing-dots span:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+        @keyframes dotPulse {
+            0%,
+            60%,
+            100% {
+                opacity: 0.2;
+                transform: translateY(0);
+            }
+            30% {
+                opacity: 1;
+                transform: translateY(-4px);
+            }
+        }
+        .chat-input-row {
+            display: flex;
+            gap: 8px;
+            padding: 8px 14px;
+            background: #fff;
+            border-top: 1px solid #e9edf4;
+            flex-shrink: 0;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .chat-input-row input {
+            flex: 1;
+            padding: 9px 16px;
+            border: 2px solid #dde3ed;
+            border-radius: 30px;
+            font-size: 14px;
+            outline: none;
+            transition: border 0.2s;
+            min-width: 120px;
+        }
+        .chat-input-row input:focus {
+            border-color: #1a5fb4;
+        }
+        .chat-input-row .voice-btn {
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            padding: 6px 8px;
+            border-radius: 50%;
+            transition: background 0.2s, color 0.2s;
+            color: #1a5fb4;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .chat-input-row .voice-btn:hover {
+            background: rgba(26, 95, 180, 0.08);
+        }
+        .chat-input-row .voice-btn.active {
+            background: #1a5fb4;
+            color: #fff;
+            animation: pulse 1s infinite;
+        }
+        @keyframes pulse {
+            0%,
+            100% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.08);
+            }
+        }
+        .chat-input-row .send-btn {
+            padding: 9px 22px;
+            background: #1a5fb4;
+            color: #fff;
+            border: none;
+            border-radius: 30px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+            font-size: 14px;
+        }
+        .chat-input-row .send-btn:hover {
+            background: #0b2b5c;
+        }
+        .chat-input-row .lang-select {
+            padding: 5px 10px;
+            border: 2px solid #dde3ed;
+            border-radius: 30px;
+            font-size: 13px;
+            background: #fff;
+            cursor: pointer;
+            outline: none;
+        }
+        .chat-input-row .lang-select:focus {
+            border-color: #1a5fb4;
+        }
+        .chat-suggestions {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            padding: 5px 14px 9px;
+            background: #fafcff;
+            border-top: 1px solid #eef2f7;
+            flex-shrink: 0;
+        }
+        .chat-suggestions button {
+            padding: 4px 14px;
+            border: 1px solid #d0d8e4;
+            border-radius: 30px;
+            background: #fff;
+            cursor: pointer;
+            font-size: 12px;
+            transition: background 0.15s, color 0.15s;
+            color: #1e293b;
+        }
+        .chat-suggestions button:hover {
+            background: #1a5fb4;
+            color: #fff;
+            border-color: #1a5fb4;
+        }
+
+        /* ─── Scheme Grid ─── */
+        .scheme-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+            gap: 16px;
+            margin-top: 12px;
+        }
+        .scheme-card {
+            background: #fff;
+            padding: 16px 18px;
+            border-radius: 14px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            border-left: 5px solid #1a5fb4;
+            transition: transform 0.15s, box-shadow 0.15s;
+            border: 1px solid rgba(0, 0, 0, 0.04);
+            border-left-width: 5px;
+        }
+        .scheme-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.07);
+        }
+        .scheme-card .title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+        .scheme-card .cat {
+            font-size: 12px;
+            color: #8895aa;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+        }
+        .scheme-card .desc {
+            font-size: 13px;
+            color: #475569;
+            margin: 6px 0 10px;
+            line-height: 1.4;
+        }
+        .scheme-card .meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 13px;
+            color: #64748b;
+            flex-wrap: wrap;
+            gap: 4px;
+        }
+        .scheme-card .match {
+            background: #e2f3e2;
+            color: #1e7a34;
+            padding: 2px 12px;
+            border-radius: 30px;
+            font-weight: 600;
+            font-size: 12px;
+        }
+        .scheme-card .actions {
+            margin-top: 10px;
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        .scheme-card .actions button {
+            padding: 4px 14px;
+            font-size: 12px;
+            border: none;
+            border-radius: 30px;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .scheme-card .actions .btn-steps {
+            background: #1a5fb4;
+            color: #fff;
+        }
+        .scheme-card .actions .btn-steps:hover {
+            background: #0b2b5c;
+        }
+        .scheme-card .actions .btn-ask {
+            background: #e9edf4;
+            color: #1e293b;
+        }
+        .scheme-card .actions .btn-ask:hover {
+            background: #d0d8e4;
+        }
+
+        /* ─── Steps ─── */
+        .step-container {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-top: 12px;
+        }
+        .step-card {
+            background: #fff;
+            padding: 14px 18px;
+            border-radius: 12px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+            display: flex;
+            gap: 14px;
+            align-items: flex-start;
+            border-left: 4px solid #1a5fb4;
+            border: 1px solid rgba(0, 0, 0, 0.04);
+            border-left-width: 4px;
+        }
+        .step-card .step-num {
+            background: #1a5fb4;
+            color: #fff;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 15px;
+            flex-shrink: 0;
+        }
+        .step-card .step-content {
+            flex: 1;
+        }
+        .step-card .step-content h4 {
+            margin: 0 0 2px 0;
+            font-size: 15px;
+        }
+        .step-card .step-content p {
+            margin: 0;
+            font-size: 13px;
+            color: #475569;
+            line-height: 1.5;
+        }
+        .step-card .step-content .docs {
+            font-size: 12px;
+            color: #8895aa;
+            margin-top: 4px;
+        }
+        .tag {
+            display: inline-block;
+            background: #e9edf4;
+            padding: 2px 12px;
+            border-radius: 30px;
+            font-size: 12px;
+            margin: 2px 4px 2px 0;
+        }
+
+        /* ─── Profile ─── */
+        .profile-box {
+            background: #fff;
+            padding: 18px 22px;
+            border-radius: 14px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            margin-bottom: 16px;
+            border: 1px solid rgba(0, 0, 0, 0.04);
+        }
+        .profile-box .row {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .profile-box .row:last-child {
+            margin-bottom: 0;
+        }
+        .profile-box label {
+            font-weight: 600;
+            font-size: 13px;
+            min-width: 80px;
+        }
+        .profile-box input,
+        .profile-box select {
+            padding: 7px 14px;
+            border: 2px solid #dde3ed;
+            border-radius: 8px;
+            font-size: 14px;
+            flex: 1;
+            min-width: 140px;
+        }
+        .profile-box input:focus,
+        .profile-box select:focus {
+            border-color: #1a5fb4;
+            outline: none;
+        }
+        .profile-box .btn {
+            padding: 8px 24px;
+            background: #1a5fb4;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .profile-box .btn:hover {
+            background: #0b2b5c;
+        }
+
+        /* ─── Map ─── */
+        .map-container {
+            background: #fff;
+            padding: 12px;
+            border-radius: 14px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            border: 1px solid rgba(0, 0, 0, 0.04);
+            margin-top: 12px;
+        }
+        #officeMap {
+            height: 340px;
+            border-radius: 10px;
+            width: 100%;
+        }
+        .office-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 10px;
+            margin-top: 14px;
+        }
+        .office-card {
+            background: #fff;
+            padding: 12px 16px;
+            border-radius: 10px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+            border: 1px solid rgba(0, 0, 0, 0.04);
+            font-size: 13px;
+        }
+        .office-card .name {
+            font-weight: 600;
+        }
+        .office-card .addr {
+            color: #64748b;
+            font-size: 12px;
+            margin-top: 2px;
+        }
+        .office-card .dist {
+            font-size: 12px;
+            color: #1a5fb4;
+            font-weight: 500;
+        }
+
+        /* ─── Responsive ─── */
+        @media (max-width:800px) {
+            .container {
+                flex-direction: column;
+            }
+            .sidebar {
+                width: 100%;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 4px;
+                padding: 6px 12px;
+                max-height: 140px;
+                overflow-y: auto;
+                border-right: none;
+                border-bottom: 1px solid #d0d8e4;
+            }
+            .sidebar .cat-title {
+                display: none;
+            }
+            .sidebar button {
+                width: auto;
+                padding: 4px 12px;
+                font-size: 12px;
+            }
+            .content {
+                max-height: none;
+                padding: 16px;
+            }
+            .header .logo {
+                font-size: 17px;
+            }
+            .header .logo small {
+                display: none;
+            }
+            .header .user-badge {
+                font-size: 12px;
+                padding: 3px 12px;
+            }
+            .chat-container {
+                height: 400px;
+            }
+            .cards {
+                grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+            }
+            .scheme-grid {
+                grid-template-columns: 1fr;
+            }
+            .topnav button {
+                padding: 5px 12px;
+                font-size: 12px;
+            }
+            .login-box {
+                padding: 28px 20px;
+            }
+            .chat-message {
+                max-width: 94%;
+            }
+            .chat-input-row {
+                flex-wrap: wrap;
+            }
+            .chat-input-row input {
+                min-width: 100px;
+            }
+            .chart-row {
+                grid-template-columns: 1fr;
+            }
+        }
+        @media (max-width:480px) {
+            .header {
+                padding: 8px 12px;
+            }
+            .content {
+                padding: 12px;
+            }
+            .profile-box .row {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .profile-box label {
+                min-width: auto;
+            }
+            .topnav button {
+                font-size: 11px;
+                padding: 4px 10px;
+            }
+            .topnav button i {
+                font-size: 12px;
+            }
+        }
+
+        /* ─── Misc ─── */
+        .flex-between {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .text-muted {
+            color: #8895aa;
+            font-size: 14px;
+        }
+        .mt-12 {
+            margin-top: 12px;
+        }
+        .rec-box {
+            background: #fff;
+            padding: 14px 20px;
+            border-radius: 14px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            border: 1px solid rgba(0, 0, 0, 0.04);
+        }
+        .typing-indicator {
+            padding: 8px 16px;
+            background: #e9edf4;
+            border-radius: 14px;
+            align-self: flex-start;
+            font-size: 14px;
+        }
+        .dark-mode .typing-indicator {
+            background: #263040 !important;
+        }
+        .status-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 6px;
+        }
+        .status-dot.green {
+            background: #2e7d32;
+        }
+        .status-dot.orange {
+            background: #ed6c02;
+        }
+        .status-dot.red {
+            background: #d32f2f;
+        }
+        .status-dot.blue {
+            background: #1a5fb4;
+        }
+        .flex-center {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .gap-6 {
+            gap: 6px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ════════════════════════════════════
+    LOGIN / SIGN UP PAGE
+    ════════════════════════════════════ -->
+    <div id="loginPage" class="login-page">
+        <div class="login-box">
+            <div class="brand-icon"><i class="fas fa-robot"></i></div>
+            <h2>Saarthi AI</h2>
+            <div class="sub">Your Personal Government Services Assistant</div>
+
+            <div class="auth-tabs">
+                <button id="tabLoginBtn" class="auth-tab active" onclick="switchAuthTab('login')">Log In</button>
+                <button id="tabSignupBtn" class="auth-tab" onclick="switchAuthTab('signup')">Sign Up</button>
+            </div>
+
+            <!-- LOG IN FORM -->
+            <form id="loginForm" onsubmit="event.preventDefault(); doLogin();">
+                <input type="text" id="loginIdentifier" placeholder="Username or Email" autocomplete="username" required />
+                <input type="password" id="loginPass" placeholder="Password" autocomplete="current-password" required />
+                <button type="submit" class="btn-primary" id="loginSubmitBtn">
+                    <i class="fas fa-arrow-right-to-bracket"></i> Log In
+                </button>
+            </form>
+
+            <!-- SIGN UP FORM -->
+            <form id="signupForm" class="hidden" onsubmit="event.preventDefault(); doSignup();">
+                <input type="text" id="signupFullName" placeholder="Full Name" autocomplete="name" required />
+                <input type="text" id="signupUsername" placeholder="Choose a Username" autocomplete="username" required minlength="3" />
+                <input type="email" id="signupEmail" placeholder="Email Address" autocomplete="email" required />
+                <input type="password" id="signupPassword" placeholder="Create Password (min 6 characters)" autocomplete="new-password" required minlength="6" />
+                <button type="submit" class="btn-primary" id="signupSubmitBtn">
+                    <i class="fas fa-user-plus"></i> Create Account
+                </button>
+            </form>
+
+            <div id="authError" class="auth-error hidden"></div>
+            <div id="authMsg" class="hint"></div>
+        </div>
+    </div>
+
+    <!-- ════════════════════════════════════
+    MAIN APP
+    ════════════════════════════════════ -->
+    <div id="mainApp" class="hidden">
+
+        <!-- HEADER -->
+        <div class="header">
+            <div class="logo">
+                <i class="fas fa-robot"></i> Saarthi AI
+                <small>· Government Services</small>
+            </div>
+            <div class="user-badge">
+                <span class="avatar"><i class="fas fa-user"></i></span>
+                <span id="displayName">Citizen</span>
+                <span class="match-badge" id="headerMatch"><i class="fas fa-bullseye"></i> 92%</span>
+            </div>
+        </div>
+
+        <!-- TOP NAV -->
+        <div class="topnav">
+            <button class="active-nav" onclick="showSection('dashboard')"><i class="fas fa-chart-pie"></i> Dashboard</button>
+            <button onclick="showSection('assistant')"><i class="fas fa-comment-dots"></i> AI Assistant</button>
+            <button onclick="showSection('schemes')"><i class="fas fa-list-ul"></i> All Schemes</button>
+            <button onclick="showSection('steps')"><i class="fas fa-list-check"></i> Step-by-Step</button>
+            <button onclick="showSection('track')"><i class="fas fa-folder-open"></i> My Apps</button>
+            <button onclick="showSection('offices')"><i class="fas fa-location-dot"></i> Offices</button>
+            <button onclick="showSection('resources')"><i class="fas fa-circle-info"></i> Resources</button>
+            <button onclick="showSection('profile')"><i class="fas fa-user-cog"></i> Profile</button>
+            <span class="spacer"></span>
+            <button class="dark-toggle" onclick="toggleDarkMode()"><i class="fas fa-moon"></i> Dark</button>
+            <button onclick="doLogout()" style="background:rgba(255,255,255,0.10);padding:5px 12px;"><i class="fas fa-right-from-bracket"></i></button>
+        </div>
+
+        <!-- CONTAINER -->
+        <div class="container">
+
+            <!-- SIDEBAR -->
+            <div class="sidebar" id="sidebar">
+                <div class="cat-title"><i class="fas fa-tags"></i> Categories</div>
+                <button class="active-side" data-cat="all" onclick="filterSchemes('all')"><i class="fas fa-th"></i> All Schemes</button>
+                <button data-cat="agriculture" onclick="filterSchemes('agriculture')"><i class="fas fa-seedling"></i> Agriculture</button>
+                <button data-cat="education" onclick="filterSchemes('education')"><i class="fas fa-graduation-cap"></i> Education</button>
+                <button data-cat="healthcare" onclick="filterSchemes('healthcare')"><i class="fas fa-heart-pulse"></i> Healthcare</button>
+                <button data-cat="housing" onclick="filterSchemes('housing')"><i class="fas fa-house"></i> Housing</button>
+                <button data-cat="business" onclick="filterSchemes('business')"><i class="fas fa-briefcase"></i> Business</button>
+                <button data-cat="employment" onclick="filterSchemes('employment')"><i class="fas fa-users"></i> Employment</button>
+                <button data-cat="women" onclick="filterSchemes('women')"><i class="fas fa-venus"></i> Women & Child</button>
+                <button data-cat="senior" onclick="filterSchemes('senior')"><i class="fas fa-person-cane"></i> Senior Citizens</button>
+                <button data-cat="digital" onclick="filterSchemes('digital')"><i class="fas fa-laptop"></i> Digital India</button>
+                <button data-cat="financial" onclick="filterSchemes('financial')"><i class="fas fa-coins"></i> Financial</button>
+            </div>
+
+            <!-- CONTENT -->
+            <div class="content">
+
+                <!-- ═══ DASHBOARD ═══ -->
+                <div id="section-dashboard" class="section active">
+                    <div class="flex-between">
+                        <div>
+                            <div class="section-title"><i class="fas fa-chart-pie"></i> Dashboard</div>
+                            <div class="section-sub">Your personal guide to government services.</div>
+                        </div>
+                        <span class="text-muted"><i class="far fa-calendar"></i> <span id="dashboardDate">Today</span></span>
+                    </div>
+
+                    <div class="cards">
+                        <div class="card"><div class="icon-big"><i class="fas fa-landmark"></i></div><div class="num" id="totalSchemes">0</div><div class="label">Total Schemes</div></div>
+                        <div class="card"><div class="icon-big"><i class="fas fa-check-circle"></i></div><div class="num" id="eligibleCount">0</div><div class="label">You're Eligible For</div></div>
+                        <div class="card"><div class="icon-big"><i class="fas fa-pen-to-square"></i></div><div class="num" id="appliedCount">0</div><div class="label">Applications Started</div></div>
+                        <div class="card"><div class="icon-big"><i class="fas fa-star"></i></div><div class="num" id="matchPercent">0%</div><div class="label">Match Score</div></div>
+                    </div>
+
+                    <div class="chart-row">
+                        <div class="chart-box"><h4><i class="fas fa-chart-bar"></i> Schemes by Category</h4><canvas id="catChart"></canvas></div>
+                        <div class="chart-box"><h4><i class="fas fa-pie-chart"></i> Your Eligibility Match</h4><canvas id="eligChart"></canvas></div>
+                    </div>
+
+                    <div class="rec-box">
+                        <h4 style="margin:0 0 6px;"><i class="fas fa-fire"></i> Top Recommended for You</h4>
+                        <div id="topRecommendations" style="display:flex;flex-wrap:wrap;gap:10px;"></div>
+                    </div>
+                </div>
+
+                <!-- ═══ AI ASSISTANT ═══ -->
+                <div id="section-assistant" class="section">
+                    <div class="section-title"><i class="fas fa-comment-dots"></i> AI Assistant</div>
+                    <div class="section-sub">Ask me anything about government schemes — I'll guide you step by step.</div>
+
+                    <div class="chat-container">
+                        <div class="chat-header">
+                            <i class="fas fa-robot"></i> Saarthi AI
+                            <span class="ai-badge">v3.0</span>
+                            <span class="voice-indicator">
+                                <span id="voiceStatus"><i class="fas fa-microphone-slash"></i></span>
+                                <span id="langLabel">EN</span>
+                            </span>
+                        </div>
+
+                        <div class="chat-messages" id="chatMessages">
+                            <div class="chat-message bot"><i class="fas fa-robot"></i> Namaste! I'm Saarthi, your AI Government Services Assistant. Tell me about yourself — your age, occupation, income, or what help you need — and I'll find the best schemes for you with step‑by‑step guidance. You can also <strong>click the mic</strong> to speak or switch language below.</div>
+                        </div>
+
+                        <div class="chat-suggestions" id="chatSuggestions">
+                            <button onclick="quickAsk('I am a farmer looking for subsidies')"><i class="fas fa-seedling"></i> Farmer subsidies</button>
+                            <button onclick="quickAsk('I want to start a small business')"><i class="fas fa-store"></i> Start business</button>
+                            <button onclick="quickAsk('I need healthcare benefits')"><i class="fas fa-heart-pulse"></i> Healthcare</button>
+                            <button onclick="quickAsk('I am a student needing scholarships')"><i class="fas fa-graduation-cap"></i> Scholarships</button>
+                            <button onclick="quickAsk('I am a woman entrepreneur')"><i class="fas fa-venus"></i> Women schemes</button>
+                            <button onclick="quickAsk('How to apply for a passport?')"><i class="fas fa-passport"></i> Passport guide</button>
+                        </div>
+
+                        <div class="chat-input-row">
+                            <select class="lang-select" id="chatLang" onchange="updateChatLanguage()">
+                                <option value="en">English</option>
+                                <option value="hi">हिन्दी</option>
+                                <option value="te">తెలుగు</option>
+                                <option value="ta">தமிழ்</option>
+                                <option value="kn">ಕನ್ನಡ</option>
+                                <option value="bn">বাংলা</option>
+                                <option value="mr">मराठी</option>
+                            </select>
+                            <button class="voice-btn" id="micBtn" onclick="toggleVoiceInput()" title="Click to speak"><i class="fas fa-microphone"></i></button>
+                            <input id="chatInput" placeholder="Type your question..." onkeydown="if(event.key==='Enter')sendChat()" />
+                            <button class="send-btn" onclick="sendChat()"><i class="fas fa-paper-plane"></i> Send</button>
+                        </div>
+                    </div>
+                    <div style="margin-top:8px;font-size:12px;color:#8895aa;text-align:center;">
+                        <i class="fas fa-brain"></i> Powered by Gemini AI · <i class="fas fa-microphone"></i> Voice input uses Web Speech API · Supports 7 languages
+                    </div>
+                </div>
+
+                <!-- ═══ ALL SCHEMES ═══ -->
+                <div id="section-schemes" class="section">
+                    <div class="flex-between">
+                        <div>
+                            <div class="section-title"><i class="fas fa-list-ul"></i> All Government Schemes</div>
+                            <div class="section-sub">Browse and filter schemes by category.</div>
+                        </div>
+                        <input id="schemeSearch" placeholder="Search schemes..." onkeyup="searchSchemes()" style="padding:7px 16px;border:2px solid #dde3ed;border-radius:30px;font-size:14px;width:200px;" />
+                    </div>
+                    <div id="schemeGrid" class="scheme-grid"></div>
+                </div>
+
+                <!-- ═══ STEP-BY-STEP ═══ -->
+                <div id="section-steps" class="section">
+                    <div class="section-title"><i class="fas fa-list-check"></i> Step-by-Step Guides</div>
+                    <div class="section-sub">Select a scheme to see the complete application process with document checklist.</div>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;margin:10px 0;">
+                        <select id="stepSchemeSelect" onchange="loadSteps()" style="padding:9px 16px;border:2px solid #dde3ed;border-radius:8px;font-size:14px;flex:1;min-width:200px;">
+                            <option value="">— Choose a scheme —</option>
+                        </select>
+                    </div>
+                    <div id="stepContainer" class="step-container">
+                        <div class="step-card" style="border-left-color:#8895aa;background:#f8fafc;">
+                            <div class="step-num" style="background:#8895aa;"><i class="fas fa-arrow-right"></i></div>
+                            <div class="step-content"><h4>Select a scheme above</h4><p>I'll show you every step from eligibility check to final approval.</p></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ═══ MY APPLICATIONS ═══ -->
+                <div id="section-track" class="section">
+                    <div class="section-title"><i class="fas fa-folder-open"></i> My Applications</div>
+                    <div class="section-sub">Track your submitted applications and their current status.</div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead><tr><th>App ID</th><th>Scheme</th><th>Category</th><th>Submitted</th><th>Status</th><th>Action</th></tr></thead>
+                            <tbody id="trackTableBody">
+                                <tr><td colspan="6" style="text-align:center;color:#8895aa;padding:30px;"><i class="fas fa-inbox"></i> No applications yet. Start applying through the AI Assistant!</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- ═══ OFFICE LOCATOR ═══ -->
+                <div id="section-offices" class="section">
+                    <div class="section-title"><i class="fas fa-location-dot"></i> Office Locator</div>
+                    <div class="section-sub">Find nearby government service centres and offices.</div>
+
+                    <div class="map-container">
+                        <div id="officeMap"></div>
+                    </div>
+
+                    <div class="office-list" id="officeList"></div>
+                </div>
+
+                <!-- ═══ RESOURCES ═══ -->
+                <div id="section-resources" class="section">
+                    <div class="section-title"><i class="fas fa-circle-info"></i> Resources & Help</div>
+                    <div class="section-sub">Quick links to get the most out of Saarthi AI.</div>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;margin-top:10px;">
+                        <div class="card" style="cursor:pointer;" onclick="showSection('assistant')"><div class="icon-big"><i class="fas fa-comment-dots"></i></div><div class="label" style="font-weight:600;">Ask AI</div><div style="font-size:12px;color:#64748b;">Get instant answers</div></div>
+                        <div class="card" style="cursor:pointer;" onclick="showSection('schemes')"><div class="icon-big"><i class="fas fa-list-ul"></i></div><div class="label" style="font-weight:600;">Browse Schemes</div><div style="font-size:12px;color:#64748b;">All govt schemes</div></div>
+                        <div class="card" style="cursor:pointer;" onclick="showSection('steps')"><div class="icon-big"><i class="fas fa-list-check"></i></div><div class="label" style="font-weight:600;">Step-by-Step</div><div style="font-size:12px;color:#64748b;">Application guides</div></div>
+                        <div class="card" style="cursor:pointer;" onclick="showSection('offices')"><div class="icon-big"><i class="fas fa-location-dot"></i></div><div class="label" style="font-weight:600;">Office Locator</div><div style="font-size:12px;color:#64748b;">Find nearby centres</div></div>
+                        <div class="card"><div class="icon-big"><i class="fas fa-phone"></i></div><div class="label" style="font-weight:600;">Helpline</div><div style="font-size:12px;color:#64748b;">1800-111-222 (toll free)</div></div>
+                        <div class="card"><div class="icon-big"><i class="fas fa-globe"></i></div><div class="label" style="font-weight:600;">Official Portal</div><div style="font-size:12px;color:#64748b;">india.gov.in</div></div>
+                    </div>
+                </div>
+
+                <!-- ═══ PROFILE ═══ -->
+                <div id="section-profile" class="section">
+                    <div class="section-title"><i class="fas fa-user-cog"></i> Your Profile</div>
+                    <div class="section-sub">Update your details to get better scheme recommendations.</div>
+
+                    <div class="profile-box">
+                        <div class="row"><label><i class="fas fa-user"></i> Full Name</label><input id="profName" value="Citizen User" /></div>
+                        <div class="row"><label><i class="fas fa-calendar"></i> Age</label><input id="profAge" type="number" value="32" /></div>
+                        <div class="row"><label><i class="fas fa-briefcase"></i> Occupation</label>
+                            <select id="profOcc">
+                                <option value="farmer">Farmer</option>
+                                <option value="teacher">Teacher</option>
+                                <option value="student">Student</option>
+                                <option value="business">Business Owner</option>
+                                <option value="salaried">Salaried Employee</option>
+                                <option value="homemaker">Homemaker</option>
+                                <option value="unemployed">Unemployed</option>
+                                <option value="other">Other</option>
+                            </select>
+                        </div>
+                        <div class="row"><label><i class="fas fa-coins"></i> Annual Income</label>
+                            <select id="profIncome">
+                                <option value="below_1l">Below ₹1 Lakh</option>
+                                <option value="1l_3l" selected>₹1-3 Lakhs</option>
+                                <option value="3l_5l">₹3-5 Lakhs</option>
+                                <option value="5l_10l">₹5-10 Lakhs</option>
+                                <option value="above_10l">Above ₹10 Lakhs</option>
+                            </select>
+                        </div>
+                        <div class="row"><label><i class="fas fa-map-pin"></i> State</label>
+                            <select id="profState">
+                                <option value="andhra_pradesh">Andhra Pradesh</option>
+                                <option value="karnataka" selected>Karnataka</option>
+                                <option value="tamilnadu">Tamil Nadu</option>
+                                <option value="maharashtra">Maharashtra</option>
+                                <option value="delhi">Delhi</option>
+                                <option value="kerala">Kerala</option>
+                                <option value="up">Uttar Pradesh</option>
+                                <option value="other">Other</option>
+                            </select>
+                        </div>
+                        <div class="row" style="margin-top:10px;">
+                            <button class="btn" onclick="updateProfile()"><i class="fas fa-save"></i> Save Profile & Recalculate</button>
+                            <span id="profileMsg" style="font-size:14px;color:#1e7a34;"></span>
+                        </div>
+                    </div>
+
+                    <div class="rec-box">
+                        <h4><i class="fas fa-bullseye"></i> Your Eligibility Snapshot</h4>
+                        <div id="eligSnapshot" style="font-size:14px;color:#475569;margin-top:4px;">Loading...</div>
+                    </div>
+                </div>
+
+            </div><!-- /content -->
+        </div><!-- /container -->
+    </div><!-- /mainApp -->
 
 
-@app.route('/api/health', methods=['GET'])
-def api_health():
-    return jsonify({'status': 'healthy'}), 200
+    <!-- ════════════════════════════════════
+    JAVASCRIPT
+    ════════════════════════════════════ -->
+    <script>
+        // ════════════════════════════════════════════════════════════
+        //  DATA — Government Schemes
+        // ════════════════════════════════════════════════════════════
 
+        const schemesData = [{
+            id: 'pmkisan',
+            title: 'PM Kisan Samman Nidhi',
+            category: 'agriculture',
+            icon: '🌾',
+            desc: 'Financial support of ₹6,000/year to small & marginal farmers.',
+            eligibility: { minAge: 18, maxAge: 80, occupation: ['farmer'], income: ['below_1l', '1l_3l'] },
+            steps: [
+                'Check eligibility on PM Kisan portal',
+                'Visit your nearest CSC or Common Service Centre',
+                'Fill the application form with Aadhaar and land records',
+                'Submit for e-verification',
+                'Receive ₹2,000 every 4 months in your bank account'
+            ],
+            docs: ['Aadhaar Card', 'Land Ownership Documents', 'Bank Account Details', 'Passport Size Photo'],
+            status: 'active'
+        }, {
+            id: 'pmfasal',
+            title: 'Pradhan Mantri Fasal Bima Yojana',
+            category: 'agriculture',
+            icon: '🌾',
+            desc: 'Crop insurance at low premiums to protect against crop failure.',
+            eligibility: { minAge: 18, maxAge: 70, occupation: ['farmer'], income: ['below_1l', '1l_3l', '3l_5l'] },
+            steps: [
+                'Contact your bank or nearest insurance company',
+                'Submit crop details and land documents',
+                'Pay the premium (2% for Kharif, 1.5% for Rabi)',
+                'Get policy issued',
+                'File claim in case of crop loss within 72 hours'
+            ],
+            docs: ['Aadhaar', 'Land Records', 'Bank Account', 'Crop Sowing Details'],
+            status: 'active'
+        }, {
+            id: 'middaymeal',
+            title: 'PM POSHAN (Mid-Day Meal)',
+            category: 'education',
+            icon: '📚',
+            desc: 'Free hot meals for school children to improve nutrition and attendance.',
+            eligibility: { minAge: 6, maxAge: 14, occupation: ['student'], income: ['below_1l', '1l_3l', '3l_5l'] },
+            steps: [
+                'Enroll your child in a government/aided school',
+                'School will automatically provide the meal',
+                'No separate application required'
+            ],
+            docs: ['School Admission Proof', 'Birth Certificate'],
+            status: 'active'
+        }, {
+            id: 'scholarship',
+            title: 'National Scholarship Portal',
+            category: 'education',
+            icon: '🎓',
+            desc: 'Merit & need-based scholarships for students from Class 1 to PhD.',
+            eligibility: { minAge: 6, maxAge: 30, occupation: ['student'], income: ['below_1l', '1l_3l', '3l_5l'] },
+            steps: [
+                'Visit National Scholarship Portal (scholarships.gov.in)',
+                'Register with your mobile and Aadhaar',
+                'Fill the application form with academic details',
+                'Upload required documents',
+                'Track your application status online'
+            ],
+            docs: ['Aadhaar', 'Bank Account', 'Income Certificate', 'Previous Marksheet', 'Passport Photo'],
+            status: 'active'
+        }, {
+            id: 'ayushman',
+            title: 'Ayushman Bharat - PMJAY',
+            category: 'healthcare',
+            icon: '🏥',
+            desc: 'Health insurance cover of ₹5 lakh per family per year for secondary & tertiary care.',
+            eligibility: { minAge: 0, maxAge: 100, occupation: ['farmer', 'student', 'salaried', 'unemployed',
+                    'homemaker', 'other'
+                ], income: ['below_1l', '1l_3l'] },
+            steps: [
+                'Check eligibility on PMJAY portal',
+                'Visit an empanelled hospital or CSC',
+                'Get your e-card created using Aadhaar',
+                'Show the card at any empanelled hospital for cashless treatment'
+            ],
+            docs: ['Aadhaar', 'Ration Card', 'Income Certificate', 'Family Details'],
+            status: 'active'
+        }, {
+            id: 'pmawas',
+            title: 'Pradhan Mantri Awas Yojana',
+            category: 'housing',
+            icon: '🏠',
+            desc: 'Affordable housing for all with interest subsidy on home loans.',
+            eligibility: { minAge: 18, maxAge: 65, occupation: ['farmer', 'salaried', 'business', 'unemployed',
+                    'homemaker', 'other'
+                ], income: ['below_1l', '1l_3l', '3l_5l', '5l_10l'] },
+            steps: [
+                'Visit PMAY official website or bank',
+                'Check your eligibility under different categories',
+                'Apply online with Aadhaar and income details',
+                'Get loan approval and subsidy sanction',
+                'Start construction or buy a house'
+            ],
+            docs: ['Aadhaar', 'Income Certificate', 'Bank Statement', 'Property Details', 'Identity Proof'],
+            status: 'active'
+        }, {
+            id: 'mudra',
+            title: 'Pradhan Mantri Mudra Yojana',
+            category: 'business',
+            icon: '💼',
+            desc: 'Loans up to ₹10 lakh for non-corporate small business enterprises.',
+            eligibility: { minAge: 18, maxAge: 65, occupation: ['business', 'farmer', 'unemployed', 'homemaker'],
+                income: ['below_1l', '1l_3l', '3l_5l', '5l_10l'] },
+            steps: [
+                'Visit any bank or NBFC offering Mudra loans',
+                'Submit your business plan and ID proof',
+                'Get loan sanctioned under Shishu/Kishor/Tarun categories',
+                'Receive funds in your account',
+                'Repay as per EMI schedule'
+            ],
+            docs: ['Aadhaar', 'PAN', 'Business Plan', 'Bank Account', 'Identity Proof', 'Address Proof'],
+            status: 'active'
+        }, {
+            id: 'startupindia',
+            title: 'Startup India Initiative',
+            category: 'business',
+            icon: '🚀',
+            desc: 'Tax benefits, funding support, and incubation for startups.',
+            eligibility: { minAge: 21, maxAge: 60, occupation: ['business', 'student', 'unemployed'],
+                income: ['below_1l', '1l_3l', '3l_5l', '5l_10l', 'above_10l'] },
+            steps: [
+                'Register your startup on Startup India portal',
+                'Get DPIIT recognition',
+                'Apply for tax exemptions and funding',
+                'Join incubation programs',
+                'Connect with investors and mentors'
+            ],
+            docs: ['Incorporation Certificate', 'Business Plan', 'Director Details', 'Financial Projections'],
+            status: 'active'
+        }, {
+            id: 'mgnrega',
+            title: 'MGNREGA (National Rural Employment)',
+            category: 'employment',
+            icon: '👨‍💼',
+            desc: 'Guaranteed 100 days of wage employment per year to rural households.',
+            eligibility: { minAge: 18, maxAge: 60, occupation: ['farmer', 'unemployed', 'homemaker', 'other'],
+                income: ['below_1l', '1l_3l'] },
+            steps: [
+                'Visit your Gram Panchayat office',
+                'Register with your job card',
+                'Apply for work in your village',
+                'Get work allotted within 15 days',
+                'Receive wages directly in your bank account'
+            ],
+            docs: ['Aadhaar', 'Job Card', 'Bank Account', 'Ration Card'],
+            status: 'active'
+        }, {
+            id: 'betsubachao',
+            title: 'Beti Bachao Beti Padhao',
+            category: 'women',
+            icon: '👩',
+            desc: 'Empowering the girl child through education and welfare schemes.',
+            eligibility: { minAge: 0, maxAge: 18, occupation: ['student'], income: ['below_1l', '1l_3l', '3l_5l'],
+                gender: 'female' },
+            steps: [
+                'Register at the nearest Anganwadi center',
+                'Provide birth certificate and family details',
+                'Enroll in school under the scheme',
+                'Access scholarships and health benefits'
+            ],
+            docs: ['Birth Certificate', 'Aadhaar of Child', 'Family Income Certificate', 'School Admission Proof'],
+            status: 'active'
+        }, {
+            id: 'womensep',
+            title: 'Women Entrepreneurship Platform',
+            category: 'women',
+            icon: '👩‍💼',
+            desc: 'Financial and mentoring support for women entrepreneurs.',
+            eligibility: { minAge: 21, maxAge: 60, occupation: ['business', 'homemaker', 'unemployed'],
+                income: ['below_1l', '1l_3l', '3l_5l', '5l_10l'], gender: 'female' },
+            steps: [
+                'Register on the Women Entrepreneurship Platform',
+                'Complete your profile and business plan',
+                'Apply for funding and mentorship',
+                'Access networking opportunities',
+                'Scale your business'
+            ],
+            docs: ['Aadhaar', 'Business Plan', 'Bank Account', 'Identity Proof'],
+            status: 'active'
+        }, {
+            id: 'pmsym',
+            title: 'PM Shram Yogi Maan-dhan',
+            category: 'senior',
+            icon: '🧓',
+            desc: 'Pension scheme for unorganised workers aged 18-40, ₹3,000/month after 60.',
+            eligibility: { minAge: 18, maxAge: 40, occupation: ['farmer', 'unemployed', 'homemaker', 'other'],
+                income: ['below_1l', '1l_3l'] },
+            steps: [
+                'Visit CSC or common service centre',
+                'Fill the application with Aadhaar and bank details',
+                'Pay the monthly contribution (₹55-200)',
+                'After 60 years, start receiving ₹3,000/month pension'
+            ],
+            docs: ['Aadhaar', 'Bank Account', 'Age Proof', 'Income Certificate'],
+            status: 'active'
+        }, {
+            id: 'digitalindia',
+            title: 'Digital India - Common Service Centres',
+            category: 'digital',
+            icon: '📱',
+            desc: 'Digital services and skill development through 5 lakh+ CSCs across India.',
+            eligibility: { minAge: 18, maxAge: 60, occupation: ['farmer', 'student', 'business', 'unemployed',
+                    'homemaker', 'other'
+                ], income: ['below_1l', '1l_3l', '3l_5l', '5l_10l'] },
+            steps: [
+                'Find your nearest CSC',
+                'Register for digital services',
+                'Access government schemes, banking, and insurance',
+                'Get training and certifications'
+            ],
+            docs: ['Aadhaar', 'Mobile Number', 'Bank Account'],
+            status: 'active'
+        }, {
+            id: 'jandhan',
+            title: 'Pradhan Mantri Jan Dhan Yojana',
+            category: 'financial',
+            icon: '💰',
+            desc: 'Universal banking access with zero balance account and insurance cover.',
+            eligibility: { minAge: 18, maxAge: 100, occupation: ['farmer', 'student', 'salaried', 'business', 'unemployed',
+                    'homemaker', 'other'
+                ], income: ['below_1l', '1l_3l', '3l_5l', '5l_10l', 'above_10l'] },
+            steps: [
+                'Visit any bank branch',
+                'Fill the Jan Dhan application form',
+                'Submit Aadhaar and one more ID proof',
+                'Get your RuPay debit card instantly',
+                'Access overdraft facility up to ₹10,000'
+            ],
+            docs: ['Aadhaar', 'Any Identity Proof', 'Passport Size Photo'],
+            status: 'active'
+        }, {
+            id: 'pmjjby',
+            title: 'PM Jeevan Jyoti Bima Yojana',
+            category: 'financial',
+            icon: '🛡️',
+            desc: 'Life insurance cover of ₹2 lakh at just ₹436 per year.',
+            eligibility: { minAge: 18, maxAge: 50, occupation: ['farmer', 'student', 'salaried', 'business', 'unemployed',
+                    'homemaker', 'other'
+                ], income: ['below_1l', '1l_3l', '3l_5l', '5l_10l', 'above_10l'] },
+            steps: [
+                'Visit any bank branch',
+                'Fill the PMJJBY enrollment form',
+                'Provide Aadhaar and bank details',
+                'Pay the annual premium of ₹436',
+                'Get life insurance cover of ₹2 lakh'
+            ],
+            docs: ['Aadhaar', 'Bank Account', 'Death Certificate (for claim)'],
+            status: 'active'
+        }, {
+            id: 'kaushal',
+            title: 'Pradhan Mantri Kaushal Vikas Yojana',
+            category: 'employment',
+            icon: '🛠️',
+            desc: 'Free skill development training and certification for youth.',
+            eligibility: { minAge: 18, maxAge: 45, occupation: ['student', 'unemployed', 'farmer', 'homemaker', 'other'],
+                income: ['below_1l', '1l_3l', '3l_5l'] },
+            steps: [
+                'Visit PMKVY training center or portal',
+                'Register with your Aadhaar',
+                'Choose a skill course',
+                'Complete training and assessment',
+                'Get certified and receive job placement support'
+            ],
+            docs: ['Aadhaar', 'Educational Certificate', 'Bank Account'],
+            status: 'active'
+        }, {
+            id: 'sukanya',
+            title: 'Sukanya Samriddhi Yojana',
+            category: 'women',
+            icon: '👧',
+            desc: 'Small savings scheme for the girl child with high interest rates.',
+            eligibility: { minAge: 0, maxAge: 10, occupation: ['student'], income: ['below_1l', '1l_3l', '3l_5l',
+                    '5l_10l', 'above_10l'
+                ], gender: 'female' },
+            steps: [
+                'Visit any post office or designated bank',
+                'Open Sukanya Samriddhi account in girl child\'s name',
+                'Deposit minimum ₹250 per year',
+                'Earn 7.6% interest (compound annually)',
+                'Withdraw after 21 years for higher education/marriage'
+            ],
+            docs: ['Birth Certificate', 'Aadhaar of Child', 'Parent\'s Aadhaar', 'Address Proof'],
+            status: 'active'
+        }];
 
-@app.errorhandler(404)
-def not_found(error):
-    return jsonify({'error': 'Endpoint not found'}), 404
+        // ─── Office data for locator ───
+        const officeData = [
+            { name: 'Passport Seva Kendra', address: 'Koramangala, Bangalore', lat: 12.9352, lng: 77.6245,
+            type: 'Passport' },
+            { name: 'CSC Centre - Indiranagar', address: 'Indiranagar, Bangalore', lat: 12.9784, lng: 77.6408,
+            type: 'CSC' },
+            { name: 'MeeSeva Centre', address: 'Jayanagar, Bangalore', lat: 12.9304, lng: 77.5804, type: 'MeeSeva' },
+            { name: 'Municipal Office - BBMP', address: 'Brigade Road, Bangalore', lat: 12.9732, lng: 77.6063,
+            type: 'Municipal' },
+            { name: 'Passport Seva Kendra', address: 'Andheri, Mumbai', lat: 19.1136, lng: 72.8697, type: 'Passport' },
+            { name: 'CSC Centre - Delhi', address: 'Connaught Place, Delhi', lat: 28.6315, lng: 77.2167, type: 'CSC' },
+            { name: 'MeeSeva Centre', address: 'Secunderabad, Hyderabad', lat: 17.4399, lng: 78.4983, type: 'MeeSeva' },
+            { name: 'Municipal Office', address: 'T. Nagar, Chennai', lat: 13.0400, lng: 80.2360, type: 'Municipal' },
+        ];
 
+        // ════════════════════════════════════════════════════════════
+        //  STATE
+        // ════════════════════════════════════════════════════════════
 
-@app.errorhandler(500)
-def internal_error(error):
-    db.session.rollback()
-    return jsonify({'error': 'Internal server error'}), 500
+        let userProfile = {
+            name: 'Citizen User',
+            age: 32,
+            occupation: 'farmer',
+            income: '1l_3l',
+            state: 'karnataka',
+            gender: 'male'
+        };
 
+        let currentUser = null;
+        let appliedSchemes = [];
+        let currentFilter = 'all';
+        let charts = {};
+        let isListening = false;
+        let recognition = null;
+        let currentLang = 'en';
+        let mapInstance = null;
 
-# ─── INIT DB ────────────────────────────────────────────────────
-with app.app_context():
-    db.create_all()
-    print("Database tables created (if not already present).")
+        // ─── Backend API base URL ───
+        // On Render + Netlify: set this to your Render backend URL, e.g.
+        // 'https://your-app.onrender.com'. Leave as '' if frontend and
+        // backend are served from the same origin.
+      const API_BASE = "https://saarthirep.onrender.com";
 
-# ─── ENTRY POINT ────────────────────────────────────────────────
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    print("\n" + "=" * 70)
-    print("  SAARTHI AI API")
-    print("=" * 70)
-    print(f"  Database: {database_url}")
-    print(f"  Server:   http://0.0.0.0:{port}")
-    print("=" * 70 + "\n")
-    app.run(host='0.0.0.0', port=port, debug=False)
+        async function apiFetch(path, options = {}) {
+            const res = await fetch(API_BASE + path, {
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+                ...options
+            });
+            let data = null;
+            try { data = await res.json(); } catch (e) { /* no body */ }
+            if (!res.ok) {
+                const errMsg = (data && data.error) ? data.error : `Request failed (${res.status})`;
+                throw new Error(errMsg);
+            }
+            return data;
+        }
+
+        // ════════════════════════════════════════════════════════════
+        //  AUTH: LOGIN / SIGNUP / LOGOUT
+        // ════════════════════════════════════════════════════════════
+
+        function switchAuthTab(tab) {
+            const loginForm = document.getElementById('loginForm');
+            const signupForm = document.getElementById('signupForm');
+            const tabLoginBtn = document.getElementById('tabLoginBtn');
+            const tabSignupBtn = document.getElementById('tabSignupBtn');
+            clearAuthError();
+            if (tab === 'login') {
+                loginForm.classList.remove('hidden');
+                signupForm.classList.add('hidden');
+                tabLoginBtn.classList.add('active');
+                tabSignupBtn.classList.remove('active');
+            } else {
+                loginForm.classList.add('hidden');
+                signupForm.classList.remove('hidden');
+                tabLoginBtn.classList.remove('active');
+                tabSignupBtn.classList.add('active');
+            }
+        }
+
+        function showAuthError(msg) {
+            const el = document.getElementById('authError');
+            el.textContent = msg;
+            el.classList.remove('hidden');
+        }
+
+        function clearAuthError() {
+            const el = document.getElementById('authError');
+            el.textContent = '';
+            el.classList.add('hidden');
+        }
+
+        function setAuthMsg(msg) {
+            document.getElementById('authMsg').textContent = msg;
+        }
+
+        async function doLogin() {
+            clearAuthError();
+            const identifier = document.getElementById('loginIdentifier').value.trim();
+            const password = document.getElementById('loginPass').value;
+            if (!identifier || !password) {
+                showAuthError('Please enter your username/email and password.');
+                return;
+            }
+            const btn = document.getElementById('loginSubmitBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Logging in...';
+            try {
+                const data = await apiFetch('/api/auth/login', {
+                    method: 'POST',
+                    body: JSON.stringify({ username: identifier, password })
+                });
+                onAuthSuccess(data.user, data.profile);
+            } catch (e) {
+                showAuthError(e.message || 'Login failed. Please check your credentials.');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-arrow-right-to-bracket"></i> Log In';
+            }
+        }
+
+        async function doSignup() {
+            clearAuthError();
+            const full_name = document.getElementById('signupFullName').value.trim();
+            const username = document.getElementById('signupUsername').value.trim();
+            const email = document.getElementById('signupEmail').value.trim();
+            const password = document.getElementById('signupPassword').value;
+
+            if (!full_name || !username || !email || !password) {
+                showAuthError('Please fill in all fields.');
+                return;
+            }
+            if (username.length < 3) {
+                showAuthError('Username must be at least 3 characters.');
+                return;
+            }
+            if (password.length < 6) {
+                showAuthError('Password must be at least 6 characters.');
+                return;
+            }
+
+            const btn = document.getElementById('signupSubmitBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating account...';
+            try {
+                const data = await apiFetch('/api/auth/signup', {
+                    method: 'POST',
+                    body: JSON.stringify({ full_name, username, email, password })
+                });
+                onAuthSuccess(data.user, null);
+            } catch (e) {
+                showAuthError(e.message || 'Signup failed. Please try again.');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-user-plus"></i> Create Account';
+            }
+        }
+
+        function onAuthSuccess(user, profile) {
+            currentUser = user;
+            document.getElementById('loginPage').classList.add('hidden');
+            document.getElementById('mainApp').classList.remove('hidden');
+            document.getElementById('displayName').textContent = user.full_name || user.username;
+
+            if (profile) {
+                applyServerProfile(profile, user.full_name);
+            }
+            initApp();
+
+            if (!profile) {
+                // New signup — fetch the default profile that was just created
+                apiFetch('/api/profile').then(data => {
+                    applyServerProfile(data.profile, data.full_name);
+                    updateDashboard();
+                    renderCharts();
+                    updateProfileUI();
+                }).catch(() => {});
+            }
+
+            // Load saved applications from the server
+            apiFetch('/api/applications').then(data => {
+                appliedSchemes = (data.applications || []);
+                updateTrackTable();
+                updateDashboard();
+            }).catch(() => {});
+        }
+
+        function applyServerProfile(profile, fullName) {
+            userProfile = {
+                name: fullName || userProfile.name,
+                age: profile.age,
+                occupation: profile.occupation,
+                income: profile.income,
+                state: profile.state,
+                gender: profile.gender
+            };
+            document.getElementById('profName').value = userProfile.name;
+            document.getElementById('profAge').value = userProfile.age;
+            document.getElementById('profOcc').value = userProfile.occupation;
+            document.getElementById('profIncome').value = userProfile.income;
+            document.getElementById('profState').value = userProfile.state;
+            if (profile.preferred_lang) {
+                currentLang = profile.preferred_lang;
+                const chatLangEl = document.getElementById('chatLang');
+                if (chatLangEl) chatLangEl.value = profile.preferred_lang;
+            }
+        }
+
+        async function doLogout() {
+            try {
+                await apiFetch('/api/auth/logout', { method: 'POST' });
+            } catch (e) { /* ignore network errors on logout */ }
+            currentUser = null;
+            appliedSchemes = [];
+            document.getElementById('mainApp').classList.add('hidden');
+            document.getElementById('loginPage').classList.remove('hidden');
+            document.getElementById('loginIdentifier').value = '';
+            document.getElementById('loginPass').value = '';
+            switchAuthTab('login');
+            setAuthMsg('You have been logged out.');
+            if (recognition) recognition.abort();
+            isListening = false;
+            const micBtn = document.getElementById('micBtn');
+            if (micBtn) micBtn.classList.remove('active');
+            const voiceStatus = document.getElementById('voiceStatus');
+            if (voiceStatus) voiceStatus.innerHTML = '<i class="fas fa-microphone-slash"></i>';
+        }
+
+        async function tryRestoreSession() {
+            try {
+                const data = await apiFetch('/api/auth/me');
+                onAuthSuccess(data.user, data.profile);
+            } catch (e) {
+                document.getElementById('loginPage').classList.remove('hidden');
+                document.getElementById('mainApp').classList.add('hidden');
+            }
+        }
+
+        // ════════════════════════════════════════════════════════════
+        //  INIT
+        // ════════════════════════════════════════════════════════════
+
+        function initApp() {
+            updateDashboard();
+            renderSchemes();
+            populateStepSelect();
+            updateProfileUI();
+            renderCharts();
+            applyDarkModeFromStorage();
+            document.getElementById('dashboardDate').textContent = new Date().toLocaleDateString('en-IN', { day: 'numeric',
+                month: 'short', year: 'numeric' });
+            initOfficeMap();
+            renderOffices();
+            updateChatLanguage();
+            updateHeaderMatch();
+        }
+
+        // ════════════════════════════════════════════════════════════
+        //  NAVIGATION
+        // ════════════════════════════════════════════════════════════
+
+        function showSection(id) {
+            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+            const target = document.getElementById('section-' + id);
+            if (target) target.classList.add('active');
+
+            document.querySelectorAll('.topnav button').forEach(b => b.classList.remove('active-nav'));
+            document.querySelectorAll('.topnav button').forEach(b => {
+                if (b.textContent.trim().toLowerCase().includes(id) ||
+                    (b.onclick && b.onclick.toString().includes(id))) {
+                    b.classList.add('active-nav');
+                }
+            });
+
+            if (id === 'schemes') renderSchemes();
+            if (id === 'steps') populateStepSelect();
+            if (id === 'dashboard') { updateDashboard();
+                renderCharts(); }
+            if (id === 'offices') {
+                setTimeout(() => { if (mapInstance) mapInstance.invalidateSize(); }, 200);
+            }
+            if (id === 'profile') updateProfileUI();
+        }
+
+        function filterSchemes(cat) {
+            currentFilter = cat;
+            document.querySelectorAll('.sidebar button').forEach(b => b.classList.remove('active-side'));
+            const btn = document.querySelector(`.sidebar button[data-cat="${cat}"]`);
+            if (btn) btn.classList.add('active-side');
+            renderSchemes();
+            showSection('schemes');
+        }
+
+        // ════════════════════════════════════════════════════════════
+        //  DASHBOARD
+        // ════════════════════════════════════════════════════════════
+
+        function updateDashboard() {
+            const total = schemesData.length;
+            const eligible = getEligibleSchemes().length;
+            const applied = appliedSchemes.length;
+            const matchPct = total > 0 ? Math.round((eligible / total) * 100) : 0;
+
+            document.getElementById('totalSchemes').textContent = total;
+            document.getElementById('eligibleCount').textContent = eligible;
+            document.getElementById('appliedCount').textContent = applied;
+            document.getElementById('matchPercent').textContent = matchPct + '%';
+            updateHeaderMatch();
+
+            const top = getEligibleSchemes().slice(0, 4);
+            const container = document.getElementById('topRecommendations');
+            if (top.length === 0) {
+                container.innerHTML =
+                    '<span class="text-muted">No schemes match your profile. Update your profile to get recommendations.</span>';
+            } else {
+                container.innerHTML = top.map(s =>
+                    `<span style="background:#e9edf4;padding:5px 16px;border-radius:30px;font-size:13px;border:1px solid rgba(0,0,0,0.04);">${s.icon} ${s.title}</span>`
+                ).join('');
+            }
+        }
+
+        function updateHeaderMatch() {
+            const total = schemesData.length;
+            const eligible = getEligibleSchemes().length;
+            const pct = total > 0 ? Math.round((eligible / total) * 100) : 0;
+            document.getElementById('headerMatch').innerHTML = `<i class="fas fa-bullseye"></i> ${pct}%`;
+        }
+
+        function getEligibleSchemes() {
+            return schemesData.filter(s => checkEligibility(s));
+        }
+
+        function checkEligibility(scheme) {
+            const e = scheme.eligibility;
+            if (e.minAge !== undefined && userProfile.age < e.minAge) return false;
+            if (e.maxAge !== undefined && userProfile.age > e.maxAge) return false;
+            if (e.occupation && !e.occupation.includes(userProfile.occupation)) return false;
+            if (e.income && !e.income.includes(userProfile.income)) return false;
+            if (e.gender && userProfile.gender !== e.gender) return false;
+            return true;
+        }
+
+        // ════════════════════════════════════════════════════════════
+        //  CHARTS
+        // ════════════════════════════════════════════════════════════
+
+        function renderCharts() {
+            const cats = {};
+            schemesData.forEach(s => { cats[s.category] = (cats[s.category] || 0) + 1; });
+            const labels = Object.keys(cats).map(k => k.charAt(0).toUpperCase() + k.slice(1));
+            const data = Object.values(cats);
+
+            const ctx1 = document.getElementById('catChart').getContext('2d');
+            if (charts.cat) charts.cat.destroy();
+            charts.cat = new Chart(ctx1, {
+                type: 'bar',
+                data: { labels, datasets: [{ label: 'Schemes', data, backgroundColor: ['#1a5fb4', '#2e7d32',
+                            '#ed6c02', '#9c27b0', '#d32f2f', '#0288d1', '#6d4c41', '#00897b', '#f57c00', '#5c6bc0'
+                        ] }] },
+                options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true,
+                            ticks: { stepSize: 1 } } } }
+            });
+
+            const eligible = getEligibleSchemes().length;
+            const notEligible = schemesData.length - eligible;
+            const ctx2 = document.getElementById('eligChart').getContext('2d');
+            if (charts.elig) charts.elig.destroy();
+            charts.elig = new Chart(ctx2, {
+                type: 'doughnut',
+                data: { labels: ['Eligible for You', 'Not Eligible'], datasets: [{ data: [eligible, notEligible],
+                        backgroundColor: ['#2e7d32', '#e0e0e0'] }] },
+                options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+            });
+        }
+
+        // ════════════════════════════════════════════════════════════
+        //  SCHEMES LIST
+        // ════════════════════════════════════════════════════════════
+
+        function renderSchemes() {
+            const grid = document.getElementById('schemeGrid');
+            let filtered = schemesData;
+            if (currentFilter !== 'all') {
+                filtered = schemesData.filter(s => s.category === currentFilter);
+            }
+            const q = document.getElementById('schemeSearch').value.toLowerCase();
+            if (q) filtered = filtered.filter(s => s.title.toLowerCase().includes(q) || s.desc.toLowerCase().includes(q));
+
+            if (filtered.length === 0) {
+                grid.innerHTML =
+                    `<div style="grid-column:1/-1;text-align:center;padding:40px;color:#8895aa;"><i class="fas fa-search"></i> No schemes found matching your criteria.</div>`;
+                return;
+            }
+
+            const eligibleIds = getEligibleSchemes().map(s => s.id);
+            grid.innerHTML = filtered.map(s => {
+                const isEligible = eligibleIds.includes(s.id);
+                return `
+              <div class="scheme-card" style="${isEligible ? 'border-left-color:#2e7d32;' : 'border-left-color:#b0b8c4;'}">
+                <div class="cat">${s.icon} ${s.category.charAt(0).toUpperCase()+s.category.slice(1)}</div>
+                <div class="title">${s.title}</div>
+                <div class="desc">${s.desc}</div>
+                <div class="meta">
+                  <span>${isEligible ? '✅ You are eligible!' : '🔹 Check eligibility'}</span>
+                  <span class="match">${isEligible ? 'Match ✓' : '—'}</span>
+                </div>
+                <div class="actions">
+                  <button class="btn-steps" onclick="showStepsFor('${s.id}')"><i class="fas fa-list-check"></i> Steps</button>
+                  <button class="btn-ask" onclick="askAboutScheme('${s.id}')"><i class="fas fa-comment"></i> Ask AI</button>
+                </div>
+              </div>
+            `;
+            }).join('');
+        }
+
+        function searchSchemes() { renderSchemes(); }
+
+        // ════════════════════════════════════════════════════════════
+        //  STEPS
+        // ════════════════════════════════════════════════════════════
+
+        function populateStepSelect() {
+            const sel = document.getElementById('stepSchemeSelect');
+            const current = sel.value;
+            sel.innerHTML = '<option value="">— Choose a scheme —</option>' +
+                schemesData.map(s => `<option value="${s.id}">${s.icon} ${s.title}</option>`).join('');
+            if (current) sel.value = current;
+        }
+
+        function loadSteps() {
+            const sel = document.getElementById('stepSchemeSelect');
+            const id = sel.value;
+            if (!id) {
+                document.getElementById('stepContainer').innerHTML =
+                    `<div class="step-card" style="border-left-color:#8895aa;background:#f8fafc;">
+                <div class="step-num" style="background:#8895aa;"><i class="fas fa-arrow-right"></i></div>
+                <div class="step-content"><h4>Select a scheme above</h4><p>I'll show you every step from eligibility check to final approval.</p></div>
+              </div>`;
+                return;
+            }
+            showStepsFor(id);
+        }
+
+        function showStepsFor(id) {
+            const scheme = schemesData.find(s => s.id === id);
+            if (!scheme) return;
+            const sel = document.getElementById('stepSchemeSelect');
+            if (sel) sel.value = id;
+
+            const container = document.getElementById('stepContainer');
+            const stepsHtml = scheme.steps.map((step, i) =>
+                `<div class="step-card">
+              <div class="step-num">${i+1}</div>
+              <div class="step-content">
+                <h4>Step ${i+1}</h4>
+                <p>${step}</p>
+              </div>
+            </div>`
+            ).join('');
+
+            const docsHtml = scheme.docs.map(d => `<span class="tag">📄 ${d}</span>`).join('');
+
+            container.innerHTML = `
+            <div style="background:#fff;padding:14px 18px;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.05);margin-bottom:10px;border:1px solid rgba(0,0,0,0.04);">
+              <h3 style="margin:0;">${scheme.icon} ${scheme.title}</h3>
+              <p style="margin:4px 0 0;color:#475569;">${scheme.desc}</p>
+              <div style="margin-top:6px;">
+                <strong>📋 Required Documents:</strong> ${docsHtml}
+              </div>
+            </div>
+            ${stepsHtml}
+            <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;">
+              <button onclick="askAboutScheme('${scheme.id}')" style="padding:8px 22px;background:#1a5fb4;color:#fff;border:none;border-radius:8px;cursor:pointer;"><i class="fas fa-comment"></i> Ask AI about this</button>
+              <button onclick="applyScheme('${scheme.id}')" style="padding:8px 22px;background:#2e7d32;color:#fff;border:none;border-radius:8px;cursor:pointer;"><i class="fas fa-pen-to-square"></i> Start Application</button>
+            </div>
+          `;
+            showSection('steps');
+        }
+
+        // ════════════════════════════════════════════════════════════
+        //  AI CHAT (Gemini + Rule-based fallback)
+        // ════════════════════════════════════════════════════════════
+
+        async function callGemini(userMessage, lang = 'en') {
+            try {
+                const data = await apiFetch('/api/chat', {
+                    method: 'POST',
+                    body: JSON.stringify({ message: userMessage, lang })
+                });
+                if (data && data.reply) {
+                    return data.reply;
+                }
+                // Backend reachable but AI unavailable/empty — use local fallback
+                return fallbackAI(userMessage);
+            } catch (e) {
+                console.warn('Chat API failed, falling back to rule-based:', e);
+                return fallbackAI(userMessage);
+            }
+        }
+
+        function fallbackAI(text) {
+            const lower = text.toLowerCase();
+            for (const s of schemesData) {
+                if (lower.includes(s.title.toLowerCase()) || lower.includes(s.title.toLowerCase().replace(/[^a-z0-9]/g,
+                    ''))) {
+                    const steps = s.steps.map((step, i) => `${i+1}. ${step}`).join('<br>');
+                    const docs = s.docs.map(d => `📄 ${d}`).join(' • ');
+                    const eligible = checkEligibility(s) ? '✅ <strong>You are eligible</strong> for this scheme!' :
+                        '🔹 Based on your profile, you may not be eligible. Please update your profile.';
+                    return `<strong>${s.icon} ${s.title}</strong><br>${s.desc}<br><br><strong>Eligibility:</strong> ${eligible}<br><br><strong>📌 Steps:</strong><br><div class="step-list">${steps}</div><br><strong>📋 Documents:</strong> ${docs}<br><br>👉 <a class="scheme-link" onclick="showStepsFor('${s.id}')">View full guide →</a>`;
+                }
+            }
+            if (lower.includes('farmer') || lower.includes('agriculture') || lower.includes('crop') || lower.includes(
+                'kisan')) {
+                const list = schemesData.filter(s => s.category === 'agriculture').map(s =>
+                    `${s.icon} <strong>${s.title}</strong> — ${s.desc} <a class="scheme-link" onclick="askAboutScheme('${s.id}')">Ask more</a>`
+                ).join('<br>');
+                return `🌾 Here are the top schemes for farmers:<br><br>${list}<br><br>Tell me which one you're interested in!`;
+            }
+            if (lower.includes('business') || lower.includes('startup') || lower.includes('loan') || lower.includes(
+                'mudra')) {
+                const list = schemesData.filter(s => s.category === 'business' || s.category === 'financial').map(s =>
+                    `${s.icon} <strong>${s.title}</strong> — ${s.desc} <a class="scheme-link" onclick="askAboutScheme('${s.id}')">Ask more</a>`
+                ).join('<br>');
+                return `💼 Business & startup schemes:<br><br>${list}`;
+            }
+            if (lower.includes('health') || lower.includes('hospital') || lower.includes('medical')) {
+                const list = schemesData.filter(s => s.category === 'healthcare' || s.id === 'pmjjby').map(s =>
+                    `${s.icon} <strong>${s.title}</strong> — ${s.desc} <a class="scheme-link" onclick="askAboutScheme('${s.id}')">Ask more</a>`
+                ).join('<br>');
+                return `🏥 Healthcare schemes:<br><br>${list}`;
+            }
+            if (lower.includes('student') || lower.includes('scholarship') || lower.includes('education')) {
+                const list = schemesData.filter(s => s.category === 'education').map(s =>
+                    `${s.icon} <strong>${s.title}</strong> — ${s.desc} <a class="scheme-link" onclick="askAboutScheme('${s.id}')">Ask more</a>`
+                ).join('<br>');
+                return `📚 Education & scholarships:<br><br>${list}`;
+            }
+            if (lower.includes('women') || lower.includes('girl') || lower.includes('female')) {
+                const list = schemesData.filter(s => s.category === 'women').map(s =>
+                    `${s.icon} <strong>${s.title}</strong> — ${s.desc} <a class="scheme-link" onclick="askAboutScheme('${s.id}')">Ask more</a>`
+                ).join('<br>');
+                return `👩 Schemes for women & girls:<br><br>${list}`;
+            }
+            if (lower.includes('senior') || lower.includes('pension') || lower.includes('old age')) {
+                const list = schemesData.filter(s => s.category === 'senior' || s.id === 'pmsym').map(s =>
+                    `${s.icon} <strong>${s.title}</strong> — ${s.desc} <a class="scheme-link" onclick="askAboutScheme('${s.id}')">Ask more</a>`
+                ).join('<br>');
+                return `🧓 Senior citizen & pension schemes:<br><br>${list}`;
+            }
+            const allList = schemesData.slice(0, 6).map(s =>
+                `${s.icon} <strong>${s.title}</strong> — ${s.desc} <a class="scheme-link" onclick="askAboutScheme('${s.id}')">Ask more</a>`
+            ).join('<br>');
+            return `🤖 I can help you find the right government scheme! Here are some popular ones:<br><br>${allList}<br><br>💡 <strong>Try asking:</strong><br>• "I am a farmer, what schemes apply?"<br>• "I want to start a business"<br>• "Healthcare benefits for me"<br>• "Scholarships for students"<br>• "How to apply for a passport?"`;
+        }
+
+        // ─── Chat functions ───
+        async function sendChat() {
+            const input = document.getElementById('chatInput');
+            const text = input.value.trim();
+            if (!text) return;
+            input.value = '';
+            const lang = document.getElementById('chatLang').value;
+            addChatMessage('user', text);
+            const typingId = showTypingIndicator();
+            let reply;
+            try {
+                reply = await callGemini(text, lang);
+            } catch (e) {
+                reply = fallbackAI(text);
+            }
+            removeTypingIndicator(typingId);
+            addChatMessage('bot', reply);
+            lastBotMessage = reply.replace(/<[^>]*>/g, '');
+            speakResponse(lastBotMessage, lang);
+        }
+
+        let lastBotMessage = '';
+
+        function quickAsk(text) {
+            document.getElementById('chatInput').value = text;
+            sendChat();
+        }
+
+        function addChatMessage(type, text) {
+            const container = document.getElementById('chatMessages');
+            const div = document.createElement('div');
+            div.className = `chat-message ${type}`;
+            div.innerHTML = text;
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function showTypingIndicator() {
+            const container = document.getElementById('chatMessages');
+            const div = document.createElement('div');
+            div.className = 'chat-message bot typing-indicator';
+            div.id = 'typing-' + Date.now();
+            div.innerHTML = '<span class="typing-dots"><span>.</span><span>.</span><span>.</span></span>';
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+            return div.id;
+        }
+
+        function removeTypingIndicator(id) {
+            const el = document.getElementById(id);
+            if (el) el.remove();
+        }
+
+        function askAboutScheme(id) {
+            const scheme = schemesData.find(s => s.id === id);
+            if (!scheme) return;
+            const q = `Tell me about ${scheme.title} and how to apply`;
+            document.getElementById('chatInput').value = q;
+            showSection('assistant');
+            setTimeout(() => sendChat(), 300);
+        }
+
+        // ════════════════════════════════════════════════════════════
+        //  VOICE INPUT / OUTPUT — FIXED & ROBUST
+        // ════════════════════════════════════════════════════════════
+
+        function toggleVoiceInput() {
+            if (isListening) {
+                stopVoiceInput();
+                return;
+            }
+            startVoiceInput();
+        }
+
+        function startVoiceInput() {
+            const lang = document.getElementById('chatLang').value;
+            const langMap = { en: 'en-US', hi: 'hi-IN', te: 'te-IN', ta: 'ta-IN', kn: 'kn-IN', bn: 'bn-IN', mr: 'mr-IN' };
+            const speechLang = langMap[lang] || 'en-US';
+
+            // Check browser support
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) {
+                alert('Voice input is not supported in this browser. Please use Google Chrome or Microsoft Edge.');
+                return;
+            }
+
+            try {
+                recognition = new SpeechRecognition();
+                recognition.lang = speechLang;
+                recognition.continuous = false;
+                recognition.interimResults = true;
+                recognition.maxAlternatives = 1;
+
+                recognition.onstart = function() {
+                    isListening = true;
+                    document.getElementById('micBtn').classList.add('active');
+                    document.getElementById('voiceStatus').innerHTML = '<i class="fas fa-microphone" style="color:#4caf50;"></i> Listening...';
+                };
+
+                recognition.onresult = function(event) {
+                    let finalText = '';
+                    let interimText = '';
+                    for (let i = event.resultIndex; i < event.results.length; i++) {
+                        if (event.results[i].isFinal) {
+                            finalText += event.results[i][0].transcript;
+                        } else {
+                            interimText += event.results[i][0].transcript;
+                        }
+                    }
+                    if (finalText) {
+                        document.getElementById('chatInput').value = finalText;
+                        stopVoiceInput();
+                        sendChat();
+                    } else if (interimText) {
+                        document.getElementById('chatInput').value = interimText;
+                    }
+                };
+
+                recognition.onerror = function(event) {
+                    console.warn('Voice recognition error:', event.error);
+                    let msg = '';
+                    if (event.error === 'not-allowed') {
+                        msg = 'Microphone access denied. Please allow microphone in browser settings.';
+                    } else if (event.error === 'no-speech') {
+                        msg = 'No speech detected. Please try again.';
+                    } else if (event.error === 'audio-capture') {
+                        msg = 'No microphone found. Please connect a microphone.';
+                    } else {
+                        msg = 'Voice error: ' + event.error + '. Please try typing instead.';
+                    }
+                    document.getElementById('chatInput').placeholder = '⚠️ ' + msg;
+                    stopVoiceInput();
+                };
+
+                recognition.onend = function() {
+                    // If we didn't get a result, clean up
+                    if (isListening) {
+                        // If the user didn't speak, just stop listening
+                        stopVoiceInput();
+                    }
+                };
+
+                recognition.start();
+            } catch (e) {
+                console.error('Voice start error:', e);
+                alert('Could not start voice recognition. Please check your microphone and try again.');
+            }
+        }
+
+        function stopVoiceInput() {
+            if (recognition) {
+                try {
+                    recognition.abort();
+                } catch (e) {}
+                recognition = null;
+            }
+            isListening = false;
+            document.getElementById('micBtn').classList.remove('active');
+            document.getElementById('voiceStatus').innerHTML = '<i class="fas fa-microphone-slash"></i>';
+            // Reset placeholder if it was changed
+            const lang = document.getElementById('chatLang').value;
+            const placeholders = {
+                en: 'Type your question...',
+                hi: 'अपना प्रश्न टाइप करें...',
+                te: 'మీ ప్రశ్నను టైప్ చేయండి...',
+                ta: 'உங்கள் கேள்வியை தட்டச்சு செய்யவும்...',
+                kn: 'ನಿಮ್ಮ ಪ್ರಶ್ನೆಯನ್ನು ಟೈಪ್ ಮಾಡಿ...',
+                bn: 'আপনার প্রশ্ন টাইপ করুন...',
+                mr: 'तुमचा प्रश्न टाइप करा...'
+            };
+            document.getElementById('chatInput').placeholder = placeholders[lang] || 'Type your question...';
+        }
+
+        // ─── Text-to-Speech ───
+        function speakResponse(text, lang = 'en') {
+            if (!text || text.length < 3) return;
+            if (!('speechSynthesis' in window)) return;
+            try {
+                const utterance = new SpeechSynthesisUtterance(text);
+                const langMap = { en: 'en-US', hi: 'hi-IN', te: 'te-IN', ta: 'ta-IN', kn: 'kn-IN', bn: 'bn-IN',
+                mr: 'mr-IN' };
+                utterance.lang = langMap[lang] || 'en-US';
+                utterance.rate = 0.9;
+                utterance.pitch = 1;
+                window.speechSynthesis.cancel();
+                window.speechSynthesis.speak(utterance);
+            } catch (e) {
+                // Silently fail
+            }
+        }
+
+        // ════════════════════════════════════════════════════════════
+        //  MULTILINGUAL
+        // ════════════════════════════════════════════════════════════
+
+        function updateChatLanguage() {
+            const lang = document.getElementById('chatLang').value;
+            currentLang = lang;
+            const labelMap = { en: 'EN', hi: 'हिं', te: 'తె', ta: 'த', kn: 'ಕ', bn: 'ব', mr: 'म' };
+            document.getElementById('langLabel').textContent = labelMap[lang] || 'EN';
+            const placeholders = {
+                en: 'Type your question...',
+                hi: 'अपना प्रश्न टाइप करें...',
+                te: 'మీ ప్రశ్నను టైప్ చేయండి...',
+                ta: 'உங்கள் கேள்வியை தட்டச்சு செய்யவும்...',
+                kn: 'ನಿಮ್ಮ ಪ್ರಶ್ನೆಯನ್ನು ಟೈಪ್ ಮಾಡಿ...',
+                bn: 'আপনার প্রশ্ন টাইপ করুন...',
+                mr: 'तुमचा प्रश्न टाइप करा...'
+            };
+            document.getElementById('chatInput').placeholder = placeholders[lang] || 'Type your question...';
+        }
+
+        // ════════════════════════════════════════════════════════════
+        //  APPLY / TRACK
+        // ════════════════════════════════════════════════════════════
+
+        async function applyScheme(id) {
+            const scheme = schemesData.find(s => s.id === id);
+            if (!scheme) return;
+            if (!checkEligibility(scheme)) {
+                alert('🔹 You may not be eligible for this scheme. Please check your profile or ask the AI for help.');
+                return;
+            }
+            if (appliedSchemes.find(a => a.schemeId === id)) {
+                alert('You have already started an application for this scheme.');
+                return;
+            }
+            try {
+                const data = await apiFetch('/api/applications', {
+                    method: 'POST',
+                    body: JSON.stringify({ scheme_id: scheme.id, scheme_title: scheme.title, category: scheme.category })
+                });
+                appliedSchemes.push(data.application);
+                updateTrackTable();
+                updateDashboard();
+                alert(`✅ Application started for "${scheme.title}"!\nID: ${data.application.id}\nTrack it in "My Applications".`);
+            } catch (e) {
+                alert('❌ ' + (e.message || 'Could not start application. Please try again.'));
+            }
+        }
+
+        function updateTrackTable() {
+            const tbody = document.getElementById('trackTableBody');
+            if (appliedSchemes.length === 0) {
+                tbody.innerHTML =
+                    `<tr><td colspan="6" style="text-align:center;color:#8895aa;padding:30px;"><i class="fas fa-inbox"></i> No applications yet. Start applying through the AI Assistant!</td></tr>`;
+                return;
+            }
+            tbody.innerHTML = appliedSchemes.map(app => {
+                const statusBadge = app.status === 'Approved' ? 'badge-green' :
+                    app.status === 'Pending Review' ? 'badge-orange' :
+                    app.status === 'Rejected' ? 'badge-red' : 'badge-blue';
+                return `<tr>
+              <td><strong>${app.id}</strong></td>
+              <td>${app.title}</td>
+              <td>${app.category}</td>
+              <td>${app.submitted}</td>
+              <td><span class="badge ${statusBadge}">${app.status}</span></td>
+              <td><button onclick="showStepsFor('${app.schemeId}')" style="padding:4px 12px;font-size:12px;background:#1a5fb4;color:#fff;border:none;border-radius:30px;cursor:pointer;"><i class="fas fa-list-check"></i> Steps</button></td>
+            </tr>`;
+            }).join('');
+        }
+
+        // ════════════════════════════════════════════════════════════
+        //  PROFILE
+        // ════════════════════════════════════════════════════════════
+
+        async function updateProfile() {
+            const name = document.getElementById('profName').value.trim() || 'Citizen User';
+            const age = parseInt(document.getElementById('profAge').value) || 32;
+            const occupation = document.getElementById('profOcc').value;
+            const income = document.getElementById('profIncome').value;
+            const state = document.getElementById('profState').value;
+
+            const msgEl = document.getElementById('profileMsg');
+            msgEl.textContent = 'Saving...';
+
+            try {
+                const data = await apiFetch('/api/profile', {
+                    method: 'PUT',
+                    body: JSON.stringify({ full_name: name, age, occupation, income, state })
+                });
+                userProfile.name = data.full_name || name;
+                userProfile.age = data.profile.age;
+                userProfile.occupation = data.profile.occupation;
+                userProfile.income = data.profile.income;
+                userProfile.state = data.profile.state;
+
+                document.getElementById('displayName').textContent = userProfile.name;
+                updateDashboard();
+                renderCharts();
+                updateProfileUI();
+                msgEl.textContent = '✅ Profile saved! Recommendations updated.';
+            } catch (e) {
+                msgEl.textContent = '❌ ' + (e.message || 'Failed to save profile.');
+            }
+            setTimeout(() => { msgEl.textContent = ''; }, 3000);
+        }
+
+        function updateProfileUI() {
+            const eligible = getEligibleSchemes();
+            const total = schemesData.length;
+            const pct = total > 0 ? Math.round((eligible.length / total) * 100) : 0;
+            document.getElementById('eligSnapshot').innerHTML = `
+            <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:4px;">
+              <span><i class="fas fa-user"></i> <strong>${userProfile.name}</strong> (${userProfile.age} yrs, ${userProfile.occupation})</span>
+              <span><i class="fas fa-check-circle"></i> <strong>${eligible.length}</strong> of ${total} schemes eligible</span>
+              <span><i class="fas fa-bullseye"></i> <strong>${pct}%</strong> match score</span>
+              <span style="color:#2e7d32;">${pct > 60 ? '🌟 Great match!' : '📈 Update profile for better matches'}</span>
+            </div>
+            ${eligible.length > 0 ? `<div style="margin-top:6px;font-size:13px;color:#475569;">✅ Eligible for: ${eligible.slice(0,5).map(s=>s.title).join(', ')}${eligible.length>5 ? `, +${eligible.length-5} more` : ''}</div>` : '<div style="margin-top:6px;color:#a51c1c;">No schemes match your profile. Try updating your details.</div>'}
+          `;
+        }
+
+        // ════════════════════════════════════════════════════════════
+        //  OFFICE LOCATOR
+        // ════════════════════════════════════════════════════════════
+
+        function initOfficeMap() {
+            if (mapInstance) {
+                mapInstance.invalidateSize();
+                return;
+            }
+            mapInstance = L.map('officeMap').setView([20.5937, 78.9629], 5);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap contributors'
+            }).addTo(mapInstance);
+
+            const icons = ['🏢', '🏛️', '📋', '🏫', '🏢', '🏛️', '📋', '🏫'];
+            officeData.forEach((o, i) => {
+                const marker = L.marker([o.lat, o.lng]).addTo(mapInstance);
+                const icon = icons[i % icons.length];
+                marker.bindPopup(`<strong>${icon} ${o.name}</strong><br>${o.address}<br><span style="color:#1a5fb4;">${o.type}</span>`);
+            });
+
+            if (officeData.length > 0) {
+                const bounds = L.latLngBounds(officeData.map(o => [o.lat, o.lng]));
+                mapInstance.fitBounds(bounds, { padding: [30, 30] });
+            }
+        }
+
+        function renderOffices() {
+            const container = document.getElementById('officeList');
+            const icons = ['🏢', '🏛️', '📋', '🏫', '🏢', '🏛️', '📋', '🏫'];
+            container.innerHTML = officeData.map((o, i) => `
+            <div class="office-card">
+              <div class="name">${icons[i % icons.length]} ${o.name}</div>
+              <div class="addr">${o.address}</div>
+              <div class="dist">${o.type}</div>
+            </div>
+          `).join('');
+        }
+
+        // ════════════════════════════════════════════════════════════
+        //  DARK MODE
+        // ════════════════════════════════════════════════════════════
+
+        function toggleDarkMode() {
+            document.body.classList.toggle('dark-mode');
+            const isDark = document.body.classList.contains('dark-mode');
+            localStorage.setItem('govSchemeDark', isDark ? 'true' : 'false');
+            setTimeout(() => renderCharts(), 100);
+        }
+
+        function applyDarkModeFromStorage() {
+            if (localStorage.getItem('govSchemeDark') === 'true') {
+                document.body.classList.add('dark-mode');
+            }
+        }
+
+        // ════════════════════════════════════════════════════════════
+        //  BOOT
+        // ════════════════════════════════════════════════════════════
+
+        window.onload = function() {
+            applyDarkModeFromStorage();
+            tryRestoreSession();
+        };
+
+        // ─── Expose globals ───
+        window.showSection = showSection;
+        window.filterSchemes = filterSchemes;
+        window.sendChat = sendChat;
+        window.quickAsk = quickAsk;
+        window.askAboutScheme = askAboutScheme;
+        window.showStepsFor = showStepsFor;
+        window.loadSteps = loadSteps;
+        window.applyScheme = applyScheme;
+        window.updateProfile = updateProfile;
+        window.toggleDarkMode = toggleDarkMode;
+        window.doLogin = doLogin;
+        window.doSignup = doSignup;
+        window.doLogout = doLogout;
+        window.switchAuthTab = switchAuthTab;
+        window.searchSchemes = searchSchemes;
+        window.renderSchemes = renderSchemes;
+        window.populateStepSelect = populateStepSelect;
+        window.toggleVoiceInput = toggleVoiceInput;
+        window.updateChatLanguage = updateChatLanguage;
+        window.renderOffices = renderOffices;
+    </script>
+
+</body>
+</html>
