@@ -1799,6 +1799,7 @@
         let mapInstance = null;
         let chatHistory = [];        // full conversation memory sent to AI
         let voiceTriggered = false;  // true when user spoke — auto-reads reply aloud
+        let voiceSendLock = false;
 
         // ─── Backend API base URL ───
         // On Render + Netlify: set this to your Render backend URL, e.g.
@@ -2441,7 +2442,8 @@
             try {
                 recognition = new SpeechRecognition();
                 recognition.lang = speechLang;
-                recognition.continuous = false;
+                recognition.continuous = true;
+                recognition.interimResults = true;
                 recognition.interimResults = true;
                 recognition.maxAlternatives = 1;
 
@@ -2461,14 +2463,21 @@
                             interimText += event.results[i][0].transcript;
                         }
                     }
-                    if (finalText) {
-                        document.getElementById('chatInput').value = finalText;
-                        stopVoiceInput();
-                        voiceTriggered = true;   // mark as voice — reply will be spoken
-                        sendChat();
-                    } else if (interimText) {
-                        document.getElementById('chatInput').value = interimText;
-                    }
+                   if (finalText && !voiceSendLock) {
+                             voiceSendLock = true;
+
+                              document.getElementById('chatInput').value = finalText;
+                              voiceTriggered = true;
+
+                             sendChat();
+
+                          setTimeout(() => {
+                          voiceSendLock = false;
+                         }, 800);
+                      }
+                         else if (interimText) {
+                           document.getElementById('chatInput').value = interimText;
+                     }
                 };
 
                 recognition.onerror = function(event) {
@@ -2489,14 +2498,14 @@
                     showSection('assistant');
                     stopVoiceInput();
                 };
-
-                recognition.onend = function() {
-                    // If we didn't get a result, clean up
-                    if (isListening) {
-                        // If the user didn't speak, just stop listening
-                        stopVoiceInput();
-                    }
-                };
+               recognition.onend = function () {
+                   if (isListening) {
+                    // restart automatically instead of stopping
+                        try {
+                         recognition.start();
+                       } catch (e) {}
+                   }
+              };
 
                 recognition.start();
             } catch (e) {
