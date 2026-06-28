@@ -1797,6 +1797,8 @@
         let recognition = null;
         let currentLang = 'en';
         let mapInstance = null;
+        let chatHistory = [];        // full conversation memory sent to AI
+        let voiceTriggered = false;  // true when user spoke — auto-reads reply aloud
 
         // ─── Backend API base URL ───
         // On Render + Netlify: set this to your Render backend URL, e.g.
@@ -1983,6 +1985,8 @@
             switchAuthTab('login');
             setAuthMsg('You have been logged out.');
             if (recognition) recognition.abort();
+            chatHistory = [];   // clear conversation memory on logout
+            voiceTriggered = false;
             isListening = false;
             const micBtn = document.getElementById('micBtn');
             if (micBtn) micBtn.classList.remove('active');
@@ -2249,16 +2253,19 @@
             try {
                 const data = await apiFetch('/api/chat', {
                     method: 'POST',
-                    body: JSON.stringify({ message: userMessage, lang })
+                    body: JSON.stringify({
+                        message: userMessage,
+                        lang,
+                        history: chatHistory.slice(-10)   // send last 10 for context
+                    })
                 });
                 if (data && data.reply) {
-                    return data.reply;
+                    return { text: data.reply, isAI: true };
                 }
-                // Backend reachable but AI unavailable/empty — use local fallback
-                return fallbackAI(userMessage);
+                return { text: fallbackAI(userMessage), isAI: false };
             } catch (e) {
                 console.warn('Chat API failed, falling back to rule-based:', e);
-                return fallbackAI(userMessage);
+                return { text: fallbackAI(userMessage), isAI: false };
             }
         }
 
@@ -2325,18 +2332,44 @@
             if (!text) return;
             input.value = '';
             const lang = document.getElementById('chatLang').value;
+            const triggeredByVoice = voiceTriggered;
+            voiceTriggered = false;
+
             addChatMessage('user', text);
+
+            // Store user message in history immediately
+            chatHistory.push({ role: 'user', content: text });
+
             const typingId = showTypingIndicator();
-            let reply;
+            let result;
             try {
-                reply = await callGemini(text, lang);
+                result = await callGemini(text, lang);
             } catch (e) {
-                reply = fallbackAI(text);
+                result = { text: fallbackAI(text), isAI: false };
             }
             removeTypingIndicator(typingId);
-            addChatMessage('bot', reply);
-            lastBotMessage = reply.replace(/<[^>]*>/g, '');
-            speakResponse(lastBotMessage, lang);
+
+            const replyText = result.text;
+            const isAI = result.isAI;
+
+            // Show AI badge on the message so user knows it's real AI vs fallback
+            const badge = isAI
+                ? '<div style="font-size:10px;opacity:0.6;margin-bottom:3px;">✨ Saarthi AI</div>'
+                : '<div style="font-size:10px;opacity:0.6;margin-bottom:3px;">📋 Guide</div>';
+            addChatMessage('bot', badge + replyText);
+
+            // Store assistant reply in history for next turn
+            chatHistory.push({ role: 'assistant', content: replyText.replace(/<[^>]*>/g, '') });
+
+            // Keep history from growing too large in memory
+            if (chatHistory.length > 30) chatHistory = chatHistory.slice(-30);
+
+            lastBotMessage = replyText.replace(/<[^>]*>/g, '');
+
+            // Only auto-speak the reply if the user spoke (voice mode)
+            if (triggeredByVoice) {
+                speakResponse(lastBotMessage, lang);
+            }
         }
 
         let lastBotMessage = '';
@@ -2431,6 +2464,7 @@
                     if (finalText) {
                         document.getElementById('chatInput').value = finalText;
                         stopVoiceInput();
+                        voiceTriggered = true;   // mark as voice — reply will be spoken
                         sendChat();
                     } else if (interimText) {
                         document.getElementById('chatInput').value = interimText;
