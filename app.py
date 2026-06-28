@@ -49,7 +49,11 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # CORS – allow only your frontend origin(s). Set ALLOWED_ORIGINS on Render to
 # your Netlify URL, e.g. https://your-site.netlify.app
-allowed_origins = os.environ.get('ALLOWED_ORIGINS', 'http://localhost:3000,http://127.0.0.1:5500').split(',')
+allowed_origins = [
+    "https://gleaming-horse-a63d32.netlify.app",
+    "http://localhost:3000",
+    "http://127.0.0.1:5500"
+]
 CORS(
     app,
     supports_credentials=True,
