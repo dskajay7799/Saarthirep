@@ -1802,7 +1802,7 @@
         // On Render + Netlify: set this to your Render backend URL, e.g.
         // 'https://your-app.onrender.com'. Leave as '' if frontend and
         // backend are served from the same origin.
-        const API_BASE = window.SAARTHI_API_BASE || '';
+        const API_BASE = 'https://saarthirep.onrender.com';
 
         async function apiFetch(path, options = {}) {
             const res = await fetch(API_BASE + path, {
