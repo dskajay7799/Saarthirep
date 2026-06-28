@@ -35,6 +35,6 @@ This project was built using AI tools and frontend technologies to demonstrate a
 
 ## 📷 Screenshots
 
-![image alt](https://github.com/dskajay7799/Saarthirep/blob/main/Screenshot%202026-06-28%20230909.png?raw=true)
-![image alt](https://github.com/dskajay7799/Saarthirep/blob/main/Screenshot%202026-06-28%20231002.png?raw=true)
-![image alt](https://github.com/dskajay7799/Saarthirep/blob/main/Screenshot%202026-06-28%20231027.png?raw=true)
+![image alt](https://res.cloudinary.com/dkgyhtdby/image/upload/v1782669608/Screenshot_2026-06-28_230909_z5cbjl.png)
+![image alt](https://res.cloudinary.com/dkgyhtdby/image/upload/v1782669608/Screenshot_2026-06-28_231002_rjoyza.png)
+![image alt](https://res.cloudinary.com/dkgyhtdby/image/upload/v1782669609/Screenshot_2026-06-28_231027_vwbmze.png)
