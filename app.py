@@ -10,35 +10,28 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 
-# ─── APP CONFIG ──────────────────────────────────────────────
+
 app = Flask(__name__)
 BASE_DIR = os.path.dirname(__file__)
 
-# Security: SECRET_KEY must be set in environment (Render -> Environment tab)
+
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY')
 if not app.config['SECRET_KEY']:
     raise RuntimeError("SECRET_KEY environment variable not set. Please set it in Render dashboard.")
 
-# Gemini API key — set this in Render's Environment tab as GEMINI_API_KEY.
-# Falling back to the key you were using, so nothing breaks if you haven't
-# moved it to an env var yet. For real production use, set the env var and
-# remove the hardcoded fallback below.
+
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', 'AIzaSyDD5DB0OH4tTVgfC9Gv6UYI-d6dO26W5hQ')
 GEMINI_MODEL = os.environ.get('GEMINI_MODEL', 'gemini-1.5-flash')
 GEMINI_URL = f'https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent'
 
-# Session configuration – cross-origin ready (Netlify frontend -> Render backend)
-# Render automatically sets RENDER=True on all its services, so we use that
-# to detect production instead of relying on FLASK_ENV (which Render does NOT set).
+
 IS_PROD = bool(os.environ.get('RENDER')) or os.environ.get('FLASK_ENV') == 'production'
-# Cross-origin cookies (Netlify → Render) REQUIRE SameSite=None + Secure.
-# Without this, the browser silently drops the session cookie after login.
+
 app.config['SESSION_COOKIE_SAMESITE'] = 'None' if IS_PROD else 'Lax'
 app.config['SESSION_COOKIE_SECURE'] = True if IS_PROD else False
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
 
-# Database – use DATABASE_URL (PostgreSQL recommended) or fallback to SQLite
 database_url = os.environ.get('DATABASE_URL')
 if not database_url:
     database_url = 'sqlite:///saarthi.db'
@@ -48,8 +41,6 @@ if database_url.startswith('postgres://'):
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# CORS – allow only your frontend origin(s). Set ALLOWED_ORIGINS on Render to
-# your Netlify URL, e.g. https://your-site.netlify.app
 allowed_origins = [
     "https://gleaming-horse-a63d32.netlify.app",
     "http://localhost:3000",
@@ -67,7 +58,7 @@ CORS(
 db = SQLAlchemy(app)
 
 
-# ─── DATABASE MODELS ──────────────────────────────────────────
+
 class User(db.Model):
     __tablename__ = 'users'
     id = db.Column(db.Integer, primary_key=True)
@@ -152,7 +143,6 @@ class ChatLog(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
-# ─── HELPERS ──────────────────────────────────────────────────
 def get_current_user():
     user_id = session.get('user_id')
     if user_id:
@@ -189,7 +179,7 @@ def get_or_create_profile(user):
     return profile
 
 
-# ─── AUTH ROUTES ──────────────────────────────────────────────
+
 @app.route('/api/auth/signup', methods=['POST'])
 def signup():
     try:
@@ -219,7 +209,7 @@ def signup():
         db.session.add(user)
         db.session.commit()
 
-        # Create a default profile row for this user
+        
         db.session.add(Profile(user_id=user.id))
         db.session.commit()
 
@@ -282,7 +272,7 @@ def me():
     return jsonify({'user': user.to_dict(), 'profile': profile.to_dict()}), 200
 
 
-# ─── PROFILE ROUTES ────────────────────────────────────────────
+
 @app.route('/api/profile', methods=['GET'])
 @login_required
 def get_profile():
@@ -331,7 +321,7 @@ def update_profile():
         return jsonify({'error': 'Failed to update profile'}), 500
 
 
-# ─── APPLICATION (SCHEME TRACKING) ROUTES ─────────────────────
+
 @app.route('/api/applications', methods=['GET'])
 @login_required
 def get_applications():
@@ -377,9 +367,7 @@ def create_application():
         return jsonify({'error': 'Failed to create application'}), 500
 
 
-# ─── GEMINI AI CHAT PROXY ──────────────────────────────────────
-# The Gemini API key never reaches the browser — the frontend calls this
-# endpoint, and this endpoint calls Google using the server-side key.
+
 @app.route('/api/chat', methods=['POST'])
 @login_required
 def chat():
@@ -399,7 +387,7 @@ def chat():
 
         if GEMINI_API_KEY:
             try:
-                # Comprehensive system prompt covering all Indian government services
+               
                 system_instruction = (
                     "You are Saarthi AI, a comprehensive Indian government services expert assistant. "
                     "You have deep knowledge of ALL Indian government schemes, programs, and services including:\n"
@@ -428,16 +416,16 @@ def chat():
                     "8. Format responses with clear sections, numbered steps, and bullet points where appropriate.\n"
                 )
 
-                # Build multi-turn conversation so Gemini remembers context
+             
                 history = data.get('history', [])
                 contents = []
-                for h in history[-10:]:  # send last 10 messages for context
+                for h in history[-10:]:  
                     role = "user" if h.get('role') == 'user' else "model"
                     contents.append({
                         "role": role,
                         "parts": [{"text": h.get('content', '')}]
                     })
-                # Append the current user message
+                
                 contents.append({
                     "role": "user",
                     "parts": [{"text": message}]
@@ -470,9 +458,9 @@ def chat():
                 print(f'Gemini request failed: {str(e)}')
 
         if not reply_text:
-            reply_text = None  # Frontend will use its own rule-based fallback if this is None
+            reply_text = None  
 
-        # Log the exchange (best-effort, don't fail the request if this fails)
+      
         try:
             log = ChatLog(user_id=user.id, message=message, reply=reply_text, lang=lang)
             db.session.add(log)
@@ -486,7 +474,7 @@ def chat():
         return jsonify({'error': 'Chat request failed'}), 500
 
 
-# ─── HEALTH / STATIC ────────────────────────────────────────────
+
 @app.route('/', methods=['GET'])
 def health_check():
     if 'text/html' in request.headers.get('Accept', '').lower():
@@ -520,12 +508,11 @@ def internal_error(error):
     return jsonify({'error': 'Internal server error'}), 500
 
 
-# ─── INIT DB ────────────────────────────────────────────────────
+
 with app.app_context():
     db.create_all()
     print("Database tables created (if not already present).")
 
-# ─── ENTRY POINT ────────────────────────────────────────────────
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     print("\n" + "=" * 70)
