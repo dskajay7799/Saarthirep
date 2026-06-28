@@ -32,5 +32,3 @@ This project was built using AI tools and frontend technologies to demonstrate a
 - Netlify (Deployment)
 
 ---
-
-## 📸 Screenshots
