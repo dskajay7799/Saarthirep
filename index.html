@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Saarthi AI – Government Services Assistant</title>
 
-    <!-- ─── Libraries ─── -->
+ 
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js">
     </script>
@@ -14,9 +14,7 @@
     </script>
 
     <style>
-        /* ═══════════════════════════════════
-           RESET & BASE
-           ═══════════════════════════════════ */
+        
         * {
             box-sizing: border-box;
             margin: 0;
@@ -112,7 +110,7 @@
             background: #1a2332;
         }
 
-        /* ─── Login ─── */
+     
         .login-page {
             display: flex;
             justify-content: center;
@@ -234,7 +232,7 @@
             color: #fff !important;
         }
 
-        /* ─── Header ─── */
+       
         .header {
             background: #1a5fb4;
             color: #fff;
@@ -291,7 +289,7 @@
             border-radius: 30px;
         }
 
-        /* ─── Top Nav ─── */
+        
         .topnav {
             background: #144b8a;
             padding: 5px 16px;
@@ -341,7 +339,7 @@
             min-height: calc(100vh - 110px);
         }
 
-        /* ─── Sidebar ─── */
+      
         .sidebar {
             width: 220px;
             background: #e9edf4;
@@ -433,7 +431,7 @@
             margin-bottom: 18px;
         }
 
-        /* ─── Cards ─── */
+        
         .cards {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
@@ -501,7 +499,7 @@
             }
         }
 
-        /* ─── Tables ─── */
+       
         .table-wrap {
             overflow-x: auto;
             margin-top: 12px;
@@ -555,7 +553,7 @@
             color: #0a4a8a;
         }
 
-        /* ─── Chat ─── */
+        
         .chat-container {
             display: flex;
             flex-direction: column;
@@ -779,7 +777,7 @@
             border-color: #1a5fb4;
         }
 
-        /* ─── Scheme Grid ─── */
+        
         .scheme-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
@@ -1106,7 +1104,7 @@
             }
         }
 
-        /* ─── Misc ─── */
+       
         .flex-between {
             display: flex;
             justify-content: space-between;
@@ -1169,9 +1167,7 @@
 </head>
 <body>
 
-    <!-- ════════════════════════════════════
-    LOGIN / SIGN UP PAGE
-    ════════════════════════════════════ -->
+   
     <div id="loginPage" class="login-page">
         <div class="login-box">
             <div class="brand-icon"><i class="fas fa-robot"></i></div>
@@ -1183,7 +1179,7 @@
                 <button id="tabSignupBtn" class="auth-tab" onclick="switchAuthTab('signup')">Sign Up</button>
             </div>
 
-            <!-- LOG IN FORM -->
+           
             <form id="loginForm" onsubmit="event.preventDefault(); doLogin();">
                 <input type="text" id="loginIdentifier" placeholder="Username or Email" autocomplete="username" required />
                 <input type="password" id="loginPass" placeholder="Password" autocomplete="current-password" required />
@@ -1192,7 +1188,7 @@
                 </button>
             </form>
 
-            <!-- SIGN UP FORM -->
+           
             <form id="signupForm" class="hidden" onsubmit="event.preventDefault(); doSignup();">
                 <input type="text" id="signupFullName" placeholder="Full Name" autocomplete="name" required />
                 <input type="text" id="signupUsername" placeholder="Choose a Username" autocomplete="username" required minlength="3" />
@@ -1208,12 +1204,10 @@
         </div>
     </div>
 
-    <!-- ════════════════════════════════════
-    MAIN APP
-    ════════════════════════════════════ -->
+   
     <div id="mainApp" class="hidden">
 
-        <!-- HEADER -->
+      
         <div class="header">
             <div class="logo">
                 <i class="fas fa-robot"></i> Saarthi AI
@@ -1226,7 +1220,7 @@
             </div>
         </div>
 
-        <!-- TOP NAV -->
+      
         <div class="topnav">
             <button class="active-nav" onclick="showSection('dashboard')"><i class="fas fa-chart-pie"></i> Dashboard</button>
             <button onclick="showSection('assistant')"><i class="fas fa-comment-dots"></i> AI Assistant</button>
@@ -1241,10 +1235,10 @@
             <button onclick="doLogout()" style="background:rgba(255,255,255,0.10);padding:5px 12px;"><i class="fas fa-right-from-bracket"></i></button>
         </div>
 
-        <!-- CONTAINER -->
+        
         <div class="container">
 
-            <!-- SIDEBAR -->
+            
             <div class="sidebar" id="sidebar">
                 <div class="cat-title"><i class="fas fa-tags"></i> Categories</div>
                 <button class="active-side" data-cat="all" onclick="filterSchemes('all')"><i class="fas fa-th"></i> All Schemes</button>
@@ -1260,10 +1254,10 @@
                 <button data-cat="financial" onclick="filterSchemes('financial')"><i class="fas fa-coins"></i> Financial</button>
             </div>
 
-            <!-- CONTENT -->
+            
             <div class="content">
 
-                <!-- ═══ DASHBOARD ═══ -->
+                
                 <div id="section-dashboard" class="section active">
                     <div class="flex-between">
                         <div>
@@ -1291,7 +1285,7 @@
                     </div>
                 </div>
 
-                <!-- ═══ AI ASSISTANT ═══ -->
+                
                 <div id="section-assistant" class="section">
                     <div class="section-title"><i class="fas fa-comment-dots"></i> AI Assistant</div>
                     <div class="section-sub">Ask me anything about government schemes — I'll guide you step by step.</div>
@@ -1339,7 +1333,7 @@
                     </div>
                 </div>
 
-                <!-- ═══ ALL SCHEMES ═══ -->
+            
                 <div id="section-schemes" class="section">
                     <div class="flex-between">
                         <div>
@@ -1351,7 +1345,7 @@
                     <div id="schemeGrid" class="scheme-grid"></div>
                 </div>
 
-                <!-- ═══ STEP-BY-STEP ═══ -->
+              
                 <div id="section-steps" class="section">
                     <div class="section-title"><i class="fas fa-list-check"></i> Step-by-Step Guides</div>
                     <div class="section-sub">Select a scheme to see the complete application process with document checklist.</div>
@@ -1368,7 +1362,7 @@
                     </div>
                 </div>
 
-                <!-- ═══ MY APPLICATIONS ═══ -->
+               
                 <div id="section-track" class="section">
                     <div class="section-title"><i class="fas fa-folder-open"></i> My Applications</div>
                     <div class="section-sub">Track your submitted applications and their current status.</div>
@@ -1382,7 +1376,7 @@
                     </div>
                 </div>
 
-                <!-- ═══ OFFICE LOCATOR ═══ -->
+               
                 <div id="section-offices" class="section">
                     <div class="section-title"><i class="fas fa-location-dot"></i> Office Locator</div>
                     <div class="section-sub">Find nearby government service centres and offices.</div>
@@ -1394,7 +1388,7 @@
                     <div class="office-list" id="officeList"></div>
                 </div>
 
-                <!-- ═══ RESOURCES ═══ -->
+                
                 <div id="section-resources" class="section">
                     <div class="section-title"><i class="fas fa-circle-info"></i> Resources & Help</div>
                     <div class="section-sub">Quick links to get the most out of Saarthi AI.</div>
@@ -1408,7 +1402,7 @@
                     </div>
                 </div>
 
-                <!-- ═══ PROFILE ═══ -->
+               
                 <div id="section-profile" class="section">
                     <div class="section-title"><i class="fas fa-user-cog"></i> Your Profile</div>
                     <div class="section-sub">Update your details to get better scheme recommendations.</div>
@@ -1461,18 +1455,14 @@
                     </div>
                 </div>
 
-            </div><!-- /content -->
-        </div><!-- /container -->
-    </div><!-- /mainApp -->
+            </div>
+        </div>
+    </div>
 
 
-    <!-- ════════════════════════════════════
-    JAVASCRIPT
-    ════════════════════════════════════ -->
+   
     <script>
-        // ════════════════════════════════════════════════════════════
-        //  DATA — Government Schemes
-        // ════════════════════════════════════════════════════════════
+     
 
         const schemesData = [{
             id: 'pmkisan',
@@ -1776,9 +1766,7 @@
             { name: 'Municipal Office', address: 'T. Nagar, Chennai', lat: 13.0400, lng: 80.2360, type: 'Municipal' },
         ];
 
-        // ════════════════════════════════════════════════════════════
-        //  STATE
-        // ════════════════════════════════════════════════════════════
+     
 
         let userProfile = {
             name: 'Citizen User',
@@ -1797,14 +1785,11 @@
         let recognition = null;
         let currentLang = 'en';
         let mapInstance = null;
-        let chatHistory = [];        // full conversation memory sent to AI
-        let voiceTriggered = false;  // true when user spoke — auto-reads reply aloud
+        let chatHistory = [];       
+        let voiceTriggered = false;  
         let voiceSendLock = false;
 
-        // ─── Backend API base URL ───
-        // On Render + Netlify: set this to your Render backend URL, e.g.
-        // 'https://your-app.onrender.com'. Leave as '' if frontend and
-        // backend are served from the same origin.
+     
       const API_BASE = "https://saarthirep.onrender.com";
 
         async function apiFetch(path, options = {}) {
@@ -1822,9 +1807,7 @@
             return data;
         }
 
-        // ════════════════════════════════════════════════════════════
-        //  AUTH: LOGIN / SIGNUP / LOGOUT
-        // ════════════════════════════════════════════════════════════
+     
 
         function switchAuthTab(tab) {
             const loginForm = document.getElementById('loginForm');
@@ -1935,7 +1918,7 @@
             initApp();
 
             if (!profile) {
-                // New signup — fetch the default profile that was just created
+              
                 apiFetch('/api/profile').then(data => {
                     applyServerProfile(data.profile, data.full_name);
                     updateDashboard();
@@ -1944,7 +1927,7 @@
                 }).catch(() => {});
             }
 
-            // Load saved applications from the server
+          
             apiFetch('/api/applications').then(data => {
                 appliedSchemes = (data.applications || []);
                 updateTrackTable();
@@ -2005,9 +1988,7 @@
             }
         }
 
-        // ════════════════════════════════════════════════════════════
-        //  INIT
-        // ════════════════════════════════════════════════════════════
+       
 
         function initApp() {
             updateDashboard();
@@ -2024,9 +2005,7 @@
             updateHeaderMatch();
         }
 
-        // ════════════════════════════════════════════════════════════
-        //  NAVIGATION
-        // ════════════════════════════════════════════════════════════
+     
 
         function showSection(id) {
             document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
@@ -2060,9 +2039,7 @@
             showSection('schemes');
         }
 
-        // ════════════════════════════════════════════════════════════
-        //  DASHBOARD
-        // ════════════════════════════════════════════════════════════
+     
 
         function updateDashboard() {
             const total = schemesData.length;
@@ -2109,9 +2086,7 @@
             return true;
         }
 
-        // ════════════════════════════════════════════════════════════
-        //  CHARTS
-        // ════════════════════════════════════════════════════════════
+        
 
         function renderCharts() {
             const cats = {};
@@ -2142,9 +2117,7 @@
             });
         }
 
-        // ════════════════════════════════════════════════════════════
-        //  SCHEMES LIST
-        // ════════════════════════════════════════════════════════════
+     
 
         function renderSchemes() {
             const grid = document.getElementById('schemeGrid');
@@ -2184,9 +2157,7 @@
 
         function searchSchemes() { renderSchemes(); }
 
-        // ════════════════════════════════════════════════════════════
-        //  STEPS
-        // ════════════════════════════════════════════════════════════
+       
 
         function populateStepSelect() {
             const sel = document.getElementById('stepSchemeSelect');
@@ -2246,9 +2217,7 @@
             showSection('steps');
         }
 
-        // ════════════════════════════════════════════════════════════
-        //  AI CHAT (Gemini + Rule-based fallback)
-        // ════════════════════════════════════════════════════════════
+        
 
         async function callGemini(userMessage, lang = 'en') {
             try {
@@ -2338,7 +2307,7 @@
 
             addChatMessage('user', text);
 
-            // Store user message in history immediately
+          
             chatHistory.push({ role: 'user', content: text });
 
             const typingId = showTypingIndicator();
@@ -2353,21 +2322,21 @@
             const replyText = result.text;
             const isAI = result.isAI;
 
-            // Show AI badge on the message so user knows it's real AI vs fallback
+           
             const badge = isAI
                 ? '<div style="font-size:10px;opacity:0.6;margin-bottom:3px;">✨ Saarthi AI</div>'
                 : '<div style="font-size:10px;opacity:0.6;margin-bottom:3px;">📋 Guide</div>';
             addChatMessage('bot', badge + replyText);
 
-            // Store assistant reply in history for next turn
+            
             chatHistory.push({ role: 'assistant', content: replyText.replace(/<[^>]*>/g, '') });
 
-            // Keep history from growing too large in memory
+           
             if (chatHistory.length > 30) chatHistory = chatHistory.slice(-30);
 
             lastBotMessage = replyText.replace(/<[^>]*>/g, '');
 
-            // Only auto-speak the reply if the user spoke (voice mode)
+          
             if (triggeredByVoice) {
                 speakResponse(lastBotMessage, lang);
             }
@@ -2414,9 +2383,7 @@
             setTimeout(() => sendChat(), 300);
         }
 
-        // ════════════════════════════════════════════════════════════
-        //  VOICE INPUT / OUTPUT — FIXED & ROBUST
-        // ════════════════════════════════════════════════════════════
+    
 
         function toggleVoiceInput() {
             if (isListening) {
@@ -2431,7 +2398,7 @@
             const langMap = { en: 'en-US', hi: 'hi-IN', te: 'te-IN', ta: 'ta-IN', kn: 'kn-IN', bn: 'bn-IN', mr: 'mr-IN' };
             const speechLang = langMap[lang] || 'en-US';
 
-            // Check browser support
+            
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             if (!SpeechRecognition) {
                 addChatMessage('bot', '⚠️ <strong>Voice input is not supported in your browser.</strong><br>Please use <strong>Google Chrome</strong> or <strong>Microsoft Edge</strong> on desktop, or Chrome on Android. Safari and Firefox do not support voice input.');
@@ -2500,7 +2467,7 @@
                 };
                recognition.onend = function () {
                    if (isListening) {
-                    // restart automatically instead of stopping
+                   
                         try {
                          recognition.start();
                        } catch (e) {}
@@ -2526,7 +2493,7 @@
             isListening = false;
             document.getElementById('micBtn').classList.remove('active');
             document.getElementById('voiceStatus').innerHTML = '<i class="fas fa-microphone-slash"></i>';
-            // Reset placeholder if it was changed
+           
             const lang = document.getElementById('chatLang').value;
             const placeholders = {
                 en: 'Type your question...',
@@ -2540,7 +2507,7 @@
             document.getElementById('chatInput').placeholder = placeholders[lang] || 'Type your question...';
         }
 
-        // ─── Text-to-Speech ───
+      
         function speakResponse(text, lang = 'en') {
             if (!text || text.length < 3) return;
             if (!('speechSynthesis' in window)) return;
@@ -2558,9 +2525,7 @@
             }
         }
 
-        // ════════════════════════════════════════════════════════════
-        //  MULTILINGUAL
-        // ════════════════════════════════════════════════════════════
+        
 
         function updateChatLanguage() {
             const lang = document.getElementById('chatLang').value;
@@ -2579,9 +2544,7 @@
             document.getElementById('chatInput').placeholder = placeholders[lang] || 'Type your question...';
         }
 
-        // ════════════════════════════════════════════════════════════
-        //  APPLY / TRACK
-        // ════════════════════════════════════════════════════════════
+   
 
         async function applyScheme(id) {
             const scheme = schemesData.find(s => s.id === id);
@@ -2630,9 +2593,7 @@
             }).join('');
         }
 
-        // ════════════════════════════════════════════════════════════
-        //  PROFILE
-        // ════════════════════════════════════════════════════════════
+
 
         async function updateProfile() {
             const name = document.getElementById('profName').value.trim() || 'Citizen User';
@@ -2681,9 +2642,7 @@
           `;
         }
 
-        // ════════════════════════════════════════════════════════════
-        //  OFFICE LOCATOR
-        // ════════════════════════════════════════════════════════════
+     
 
         function initOfficeMap() {
             if (mapInstance) {
@@ -2720,9 +2679,7 @@
           `).join('');
         }
 
-        // ════════════════════════════════════════════════════════════
-        //  DARK MODE
-        // ════════════════════════════════════════════════════════════
+      
 
         function toggleDarkMode() {
             document.body.classList.toggle('dark-mode');
@@ -2737,10 +2694,7 @@
             }
         }
 
-        // ════════════════════════════════════════════════════════════
-        //  BOOT
-        // ════════════════════════════════════════════════════════════
-
+      
         window.onload = function() {
             applyDarkModeFromStorage();
             // Wake up the Render backend immediately — free tier spins down after
@@ -2751,7 +2705,7 @@
             tryRestoreSession();
         };
 
-        // ─── Expose globals ───
+   
         window.showSection = showSection;
         window.filterSchemes = filterSchemes;
         window.sendChat = sendChat;
