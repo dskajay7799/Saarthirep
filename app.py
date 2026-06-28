@@ -399,20 +399,64 @@ def chat():
 
         if GEMINI_API_KEY:
             try:
-                prompt = (
-                    "You are Saarthi AI, a helpful government services assistant for India. "
-                    "Answer the user's question about Indian government schemes, documents, "
-                    "procedures, and eligibility. Provide clear, step-by-step guidance. "
-                    "Keep responses concise and helpful. "
-                    f"User's language preference: {lang}. "
-                    f"User question: {message}"
+                # Comprehensive system prompt covering all Indian government services
+                system_instruction = (
+                    "You are Saarthi AI, a comprehensive Indian government services expert assistant. "
+                    "You have deep knowledge of ALL Indian government schemes, programs, and services including:\n"
+                    "- PM schemes: PM-KISAN, PM Awas Yojana, PM Jan Dhan, PM Mudra, PM Ujjwala, PM SVANidhi, PM Garib Kalyan, etc.\n"
+                    "- Agriculture: MSP, Kisan Credit Card, PMFBY crop insurance, Soil Health Card, e-NAM, PM Fasal Bima\n"
+                    "- Education: Scholarships, Mid-Day Meal, RTE Act, Beti Bachao Beti Padhao, Samagra Shiksha\n"
+                    "- Healthcare: Ayushman Bharat PMJAY (5 lakh cover), JSSK, NHM, Janani Suraksha Yojana\n"
+                    "- Women & Child: ICDS/Anganwadi, Sukanya Samriddhi Yojana, Maternity Benefit Act, Poshan Abhiyan\n"
+                    "- Housing: PMAY Urban & Rural (beneficiary-led, BLC, AHP components), Smart Cities, AMRUT\n"
+                    "- Employment: MGNREGA (100 days), PMEGP, Skill India / PMKVY, Startup India, NSAP, Shramik cards\n"
+                    "- Financial inclusion: Jan Dhan accounts, PMJJBY life insurance, PMSBY accident insurance, APY pension\n"
+                    "- Digital India: DigiLocker, CSC centers, UMANG app, e-governance portals, DBT transfers\n"
+                    "- Documents: Aadhaar enrollment/update, PAN card, ration card (NFSA), voter ID, passport, driving license, caste/income/domicile/OBC/EWS certificates\n"
+                    "- Grievance: RTI process, CPGRAMS portal, PM helpline 1800-11-0031, state CM helplines\n"
+                    "- Taxes & finance: Income tax filing, GST, EPF/ESIC, NPS, PPF, Sovereign Gold Bond\n"
+                    "- State schemes: You know schemes for all 28 states and 8 UTs\n\n"
+                    "BEHAVIOR RULES:\n"
+                    "1. Answer ANY question about government services, schemes, eligibility, required documents, application steps, official portals, and helpline numbers.\n"
+                    "2. Give detailed, practical, step-by-step guidance — not vague summaries.\n"
+                    "3. Always mention the official portal URL or helpline when relevant.\n"
+                    "4. Be conversational and empathetic — users may be unfamiliar with processes.\n"
+                    "5. Remember the conversation history and refer back to it naturally.\n"
+                    "6. If a scheme has changed or you're unsure of the latest figures, say so and direct to the official portal.\n"
+                    f"7. Respond in: {lang} (en=English, hi=Hindi, te=Telugu, ta=Tamil, kn=Kannada, bn=Bengali, mr=Marathi). "
+                    "Use simple language everyone can understand.\n"
+                    "8. Format responses with clear sections, numbered steps, and bullet points where appropriate.\n"
                 )
-                payload = {"contents": [{"parts": [{"text": prompt}]}]}
+
+                # Build multi-turn conversation so Gemini remembers context
+                history = data.get('history', [])
+                contents = []
+                for h in history[-10:]:  # send last 10 messages for context
+                    role = "user" if h.get('role') == 'user' else "model"
+                    contents.append({
+                        "role": role,
+                        "parts": [{"text": h.get('content', '')}]
+                    })
+                # Append the current user message
+                contents.append({
+                    "role": "user",
+                    "parts": [{"text": message}]
+                })
+
+                payload = {
+                    "system_instruction": {"parts": [{"text": system_instruction}]},
+                    "contents": contents,
+                    "generationConfig": {
+                        "temperature": 0.7,
+                        "maxOutputTokens": 1000,
+                        "topP": 0.9
+                    }
+                }
                 resp = requests.post(
                     GEMINI_URL,
                     params={'key': GEMINI_API_KEY},
                     json=payload,
-                    timeout=20
+                    timeout=25
                 )
                 if resp.ok:
                     result = resp.json()
@@ -420,6 +464,8 @@ def chat():
                     if candidates and candidates[0].get('content', {}).get('parts'):
                         reply_text = candidates[0]['content']['parts'][0].get('text')
                         used_ai = True
+                else:
+                    print(f'Gemini API error {resp.status_code}: {resp.text[:300]}')
             except requests.RequestException as e:
                 print(f'Gemini request failed: {str(e)}')
 
