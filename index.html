@@ -2440,11 +2440,10 @@
             }
 
             try {
-                recognition = new SpeechRecognition();
-                recognition.lang = speechLang;
-                recognition.continuous = true;
-                recognition.interimResults = true;
-                recognition.interimResults = true;
+                 recognition = new SpeechRecognition();
+                 recognition.lang = speechLang;
+                recognition.continuous = false;
+                recognition.interimResults = false;
                 recognition.maxAlternatives = 1;
 
                 recognition.onstart = function() {
@@ -2453,32 +2452,40 @@
                     document.getElementById('voiceStatus').innerHTML = '<i class="fas fa-microphone" style="color:#4caf50;"></i> Listening...';
                 };
 
-                recognition.onresult = function(event) {
-                    let finalText = '';
-                    let interimText = '';
-                    for (let i = event.resultIndex; i < event.results.length; i++) {
-                        if (event.results[i].isFinal) {
-                            finalText += event.results[i][0].transcript;
-                        } else {
-                            interimText += event.results[i][0].transcript;
-                        }
-                    }
-                   if (finalText && !voiceSendLock) {
-                             voiceSendLock = true;
+            recognition.onresult = function(event) {
 
-                              document.getElementById('chatInput').value = finalText;
-                              voiceTriggered = true;
+    // Ignore anything picked up while the AI is speaking
+    if (speechSynthesis.speaking) return;
 
-                             sendChat();
+    let finalText = '';
+    let interimText = '';
 
-                          setTimeout(() => {
-                          voiceSendLock = false;
-                         }, 800);
-                      }
-                         else if (interimText) {
-                           document.getElementById('chatInput').value = interimText;
-                     }
-                };
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+        if (event.results[i].isFinal) {
+            finalText += event.results[i][0].transcript;
+        } else {
+            interimText += event.results[i][0].transcript;
+        }
+    }
+
+    if (finalText && !voiceSendLock) {
+        voiceSendLock = true;
+
+        document.getElementById('chatInput').value = finalText;
+        voiceTriggered = true;
+
+        sendChat();
+
+        setTimeout(() => {
+            voiceSendLock = false;
+        }, 800);
+
+    } else if (interimText) {
+        document.getElementById('chatInput').value = interimText;
+    }
+}; 
+
+
 
                 recognition.onerror = function(event) {
                     console.warn('Voice recognition error:', event.error);
@@ -2498,14 +2505,17 @@
                     showSection('assistant');
                     stopVoiceInput();
                 };
-               recognition.onend = function () {
-                   if (isListening) {
-                    // restart automatically instead of stopping
-                        try {
-                         recognition.start();
-                       } catch (e) {}
-                   }
-              };
+            recognition.onend = function () {
+
+   
+              if (speechSynthesis.speaking) return;
+
+                 if (isListening) {
+                  try {
+            recognition.start();
+                } catch (e) {}
+                }
+           };
 
                 recognition.start();
             } catch (e) {
@@ -2541,22 +2551,51 @@
         }
 
         // ─── Text-to-Speech ───
-        function speakResponse(text, lang = 'en') {
-            if (!text || text.length < 3) return;
-            if (!('speechSynthesis' in window)) return;
-            try {
-                const utterance = new SpeechSynthesisUtterance(text);
-                const langMap = { en: 'en-US', hi: 'hi-IN', te: 'te-IN', ta: 'ta-IN', kn: 'kn-IN', bn: 'bn-IN',
-                mr: 'mr-IN' };
-                utterance.lang = langMap[lang] || 'en-US';
-                utterance.rate = 0.9;
-                utterance.pitch = 1;
-                window.speechSynthesis.cancel();
-                window.speechSynthesis.speak(utterance);
-            } catch (e) {
-                // Silently fail
+           function speakResponse(text, lang = 'en') {
+                if (!text || text.length < 3) return;
+               if (!('speechSynthesis' in window)) return;
+
+              // Stop listening while AI is speaking
+                   if (recognition) {
+                 try {
+                   recognition.abort();
+                 } catch (e) {}
             }
-        }
+
+                try {
+                const utterance = new SpeechSynthesisUtterance(text);
+
+                const langMap = {
+                    en: 'en-US',
+                    hi: 'hi-IN',
+                    te: 'te-IN',
+                    ta: 'ta-IN',
+                    kn: 'kn-IN',
+                    bn: 'bn-IN',
+                    mr: 'mr-IN'
+        };
+
+        utterance.lang = langMap[lang] || 'en-US';
+        utterance.rate = 0.9;
+        utterance.pitch = 1;
+
+        utterance.onstart = () => {
+            isListening = false;
+        };
+
+         utterance.onend = () => {
+          if (!isListening) {
+                startVoiceInput();
+              }
+              };
+
+        speechSynthesis.cancel();
+        speechSynthesis.speak(utterance);
+
+    } catch (e) {
+        console.error(e);
+    }
+}
 
         // ════════════════════════════════════════════════════════════
         //  MULTILINGUAL
