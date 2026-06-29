@@ -1,6 +1,5 @@
 import os
 import re
-import json
 from datetime import datetime, timedelta
 from functools import wraps
 
@@ -19,11 +18,11 @@ if not app.config['SECRET_KEY']:
     raise RuntimeError("SECRET_KEY environment variable not set. Please set it in Render dashboard.")
 
 # Gemini API key — set this in Render's Environment tab as GEMINI_API_KEY.
-# Falling back to the key you were using, so nothing breaks if you haven't
-# moved it to an env var yet. For real production use, set the env var and
-# remove the hardcoded fallback below.
-GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', 'AIzaSyDD5DB0OH4tTVgfC9Gv6UYI-d6dO26W5hQ')
-GEMINI_MODEL = os.environ.get('GEMINI_MODEL', 'gemini-1.5-flash')
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+
+if not GEMINI_API_KEY:
+    raise RuntimeError("GEMINI_API_KEY environment variable not set.")
+GEMINI_MODEL = os.environ.get('GEMINI_MODEL', 'gemini-2.5-flash')
 GEMINI_URL = f'https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent'
 
 
@@ -152,7 +151,7 @@ class ChatLog(db.Model):
 def get_current_user():
     user_id = session.get('user_id')
     if user_id:
-        return User.query.get(user_id)
+        return db.session.get(User, user_id)
     return None
 
 
@@ -184,7 +183,7 @@ def get_or_create_profile(user):
         db.session.commit()
     return profile
 
- 
+
 @app.route('/api/auth/signup', methods=['POST'])
 def signup():
     try:
@@ -352,17 +351,16 @@ def create_application():
         if existing:
             return jsonify({'error': 'You already have an application for this scheme', 'application': existing.to_dict()}), 409
 
-        count = Application.query.filter_by(user_id=user.id).count()
-        app_code = 'APP' + str(count + 1).zfill(3)
-
         application = Application(
             user_id=user.id,
-            app_code=app_code,
+            app_code='PENDING',          # placeholder until we have an id
             scheme_id=scheme_id,
             scheme_title=scheme_title,
             category=category
         )
         db.session.add(application)
+        db.session.flush()               # assigns application.id without committing
+        application.app_code = f"APP{application.id:06d}"
         db.session.commit()
 
         return jsonify({'message': 'Application created', 'application': application.to_dict()}), 201
@@ -463,9 +461,6 @@ def chat():
                     print(f'Gemini API error {resp.status_code}: {resp.text[:300]}')
             except requests.RequestException as e:
                 print(f'Gemini request failed: {str(e)}')
-
-        if not reply_text:
-            reply_text = None  # Frontend will use its own rule-based fallback if this is None
 
         # Log the exchange (best-effort, don't fail the request if this fails)
         try:
